@@ -1,0 +1,8 @@
+# Hasil build Rust (Cargo.lock sengaja TIDAK diabaikan untuk reproducible build)
+/target/
+
+# Konfigurasi editor lokal
+.vscode/
+.idea/
+*.swp
+*~

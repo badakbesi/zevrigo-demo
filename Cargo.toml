@@ -1,0 +1,95 @@
+[package]
+name = "zevrigo-demo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "zevrigo-demo"
+path = "src/main.rs"
+
+[dependencies]
+# DEC-36: MOD-18 boleh memakai MOD-01, 02, 08, 09. Gerbang RPC (TSK-M53) hanya memakai MOD-08; upacara genesis (TSK-M62)
+# memakai MOD-01 (transaksi, jumlah), MOD-02 (sighash, tanda tangan BIP340), dan MOD-09 (alamat bech32m). Faucet
+# (TSK-M54) memakai MOD-08 dan MOD-09 (frasa, kunci akun, pemilihan koin, tanda tangan kirim).
+zevrigo-crypto.workspace = true
+zevrigo-primitives.workspace = true
+zevrigo-rpc.workspace = true
+zevrigo-wallet-core.workspace = true
+# DEC-10 bagian 13 (DEC-36): server HTTP axum dengan fitur yang sama dengan MOD-14 (`http1`, `tokio`), tanpa paket baru.
+axum = { workspace = true, features = ["http1", "tokio"] }
+# DEC-10 bagian 13: tipe galat klien JSON-RPC (kode, pesan, `data`) untuk diteruskan apa adanya. Fitur sama dengan MOD-08.
+jsonrpsee = { workspace = true, features = ["client-core"] }
+serde_json.workspace = true
+# DEC-10 bagian 4 (TSK-M64): SHA-256 untuk hash skrip inline halaman Next.js di kebijakan keamanan konten mode `web`,
+# paket yang sama dengan MOD-14 dan MOD-09 (tanpa paket baru).
+sha2.workspace = true
+thiserror.workspace = true
+# Fitur `sync` (TSK-M54): `tokio::sync::Mutex` untuk wallet faucet; bagian dari paket tokio yang sama, tanpa paket baru.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
+
+# zevrigo_lab (17 November 2026, AGENDA P1): repo sendiri, paket di akar repo sekaligus akar workspace.
+[workspace]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.0"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# zevrigo_lab (17 November 2026, AGENDA P3): crate inti dari repo `zevrigo` di folder sebelah (`../zevrigo`). Sementara
+# lewat path; diganti dependensi git ke repo inti dengan tag sesudah keputusan git pencipta.
+zevrigo-primitives = { path = "../zevrigo/crates/primitives" }
+zevrigo-crypto = { path = "../zevrigo/crates/crypto" }
+zevrigo-rpc = { path = "../zevrigo/crates/rpc" }
+zevrigo-wallet-core = { path = "../zevrigo/crates/wallet-core" }
+thiserror = "2.0.21"
+# DEC-10 bagian 4: hanya MOD-09 wallet-core (BIP39 dan BIP32); `sha2` juga MOD-14 explorer (hash CSP, TSK-M38).
+# Seri digest 0.10, sama dengan k256.
+sha2 = { version = "0.10.9", default-features = false }
+# DEC-10 bagian 2: hanya untuk crate di luar konsensus (network, rpc, aplikasi). Fitur ditambah per crate.
+tokio = { version = "1.54.1", default-features = false }
+jsonrpsee = { version = "0.26.1", default-features = false }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt"] }
+# DEC-10 bagian 6 (DEC-25): hanya MOD-14 explorer. rusqlite dengan fitur `bundled` mengompilasi SQLite (C).
+# DEC-10 bagian 13 (DEC-36): axum juga di MOD-18 demo (gerbang RPC), fitur sama dengan MOD-14, tanpa paket baru.
+# Fitur bawaan keduanya dimatikan; fitur ditambah di crate saat pemakaian pertama (TSK-M29, TSK-M30).
+axum = { version = "0.8.9", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+dbg_macro = "deny"
+float_arithmetic = "deny"
+float_cmp = "deny"
+float_cmp_const = "deny"
+lossy_float_literal = "deny"
+cast_precision_loss = "deny"
+imprecise_flops = "deny"
+suboptimal_flops = "deny"
+
+# DEC-27: Argon2id dan BLAKE2 di dalamnya dioptimalkan juga di profil dev dan test, agar uji wallet dengan parameter
+# Argon2id penuh (64 MiB) tidak lambat. Tidak mengubah Cargo.lock maupun build rilis.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3

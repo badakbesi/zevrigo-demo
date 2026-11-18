@@ -1,0 +1,32 @@
+# Daftar izin konteks build paket Docker (TSK-M33, DEC-39). Konteks = folder induk zevrigo_lab; BuildKit membaca berkas ini
+# karena namanya <Dockerfile>.dockerignore di samping Dockerfile. Yang tidak diizinkan di bawah tidak dikirim ke Docker,
+# termasuk ai_advisory_hub, .agent, zevrigo-wallet, .git, hasil build, rust-toolchain.toml, dan .cargo.
+*
+!zevrigo/Cargo.toml
+!zevrigo/Cargo.lock
+!zevrigo/crates
+!zevrigo/apps/node
+!zevrigo/apps/cli
+!zevrigo/apps/miner
+!zevrigo/tests
+!zevrigo/vendor
+!zevrigo-explorer/Cargo.toml
+!zevrigo-explorer/Cargo.lock
+!zevrigo-explorer/src
+!zevrigo-explorer/web
+!zevrigo-demo/Cargo.toml
+!zevrigo-demo/Cargo.lock
+!zevrigo-demo/src
+!zevrigo-blog
+# Hasil build dan paket npm. Jangan memakai pola **/target atau **/out: crates/pow/src/target adalah modul Rust (Q151
+# percobaan 1 gagal karena itu).
+**/node_modules
+**/.git
+**/.next
+zevrigo/target
+zevrigo-explorer/target
+zevrigo-demo/target
+zevrigo-explorer/web/out
+zevrigo-blog/out
+**/*.tsbuildinfo
+**/next-env.d.ts
