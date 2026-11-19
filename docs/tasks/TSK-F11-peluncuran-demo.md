@@ -20,3 +20,10 @@ menimpa chain ini. Chain uji lama (tinggi ±870) hanya ada di cadangan.
 
 ## Bagian 2 (tahap 2)
 Pendaftaran Investor Demo, distribusi vesting dari kantong Investor Demo, pengumuman (Rancangan Bagian 6, tahap 2).
+
+## Mulai ulang kedua (19 November 2026, RENCANA_REGTEST R3)
+Keputusan pencipta 19 November 2026: data chain lama di PC dan VPS dihapus tanpa arsip, wallet penambang, treasury, dan faucet
+baru, PeerId seed baru (`12D3KooWABPBsu8gZWtL7bbeEPjg6gwRPDbp3GZidpTeUC95rRDo`), image dari repo `zevrigo-demo`. Peluncuran tertutup dengan pola bagian 1 (99 blok,
+upacara, blok 100) di PC, lalu volume seed dipindah ke VPS (pola TSK-M65). Risiko "chain demo bisa ditulis ulang siapa pun"
+diterima dan diumumkan di blog dan `SUMBER_RESMI.md` repo inti. Langkah: Q156 inventaris, Q157/Q157b hapus PC dan seed baru,
+q157_wallet.sh wallet baru, Q158 commit dan peluncuran tertutup, Q159 VPS.
