@@ -88,12 +88,17 @@ services:
 
   blog:
     profiles: ["vps"]
-    # TSK-M64 (DEC-37): blog statis repo zevrigo-blog (dibangun di image, /usr/share/zevrigo/blog) lewat zevrigo-demo mode web, di
-    # namespace node seed, mendengar 127.0.0.1:28807, hanya dicapai lewat cloudflared. Tanpa kuki dan tanpa log pengunjung.
+    # TSK-M64 (DEC-37): blog statis repo zevrigo-blog lewat zevrigo-demo mode web, di namespace node seed, mendengar
+    # 127.0.0.1:28807, hanya dicapai lewat cloudflared. Tanpa kuki dan tanpa log pengunjung.
+    # Q179 (21 November 2026): hasil `next build` (out/) dari folder ./blog di samping compose ini (VPS: ~/zevrigo/blog), baca
+    # saja, menimpa salinan di image. Artikel dan halaman unduh baru cukup menyalin folder itu lalu membuat ulang container blog,
+    # tanpa image Docker baru. Folder wajib ada sebelum `up` (tanpa folder, Docker membuat folder kosong dan blog kosong).
     image: zevrigo:regtest
     pull_policy: never
     entrypoint: ["zevrigo-demo"]
     command: ["web", "--web-dir", "/usr/share/zevrigo/blog"]
+    volumes:
+      - ./blog:/usr/share/zevrigo/blog:ro
     network_mode: "service:node"
     depends_on:
       - node
