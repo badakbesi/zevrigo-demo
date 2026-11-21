@@ -86,6 +86,46 @@ services:
     stop_grace_period: 10s
     restart: unless-stopped
 
+  penambang-cadangan:
+    profiles: ["vps"]
+    # Q181 (21 November 2026, pencipta: penambang cadangan di VPS, mode cadangan, hadiah ke alamat penambang PC, pasang
+    # secepatnya): di namespace node seed (RPC 127.0.0.1:28801 bawaan zevrigo-cli dan zevrigo-miner, tidak lewat gerbang
+    # publik). Setiap 30 detik membaca tinggi chain; menambang satu blok hanya bila tinggi tidak naik selama ZVRG_DIAM detik
+    # (bawaan 300), misalnya saat PC mati. Selama miner-berkala PC jalan (satu blok per 120 detik) layanan ini diam. Sesudah
+    # mulai juga menunggu ZVRG_DIAM detik, agar node seed yang baru menyala sempat sinkron dulu. ZVRG_PAYOUT = payload x-only
+    # alamat penambang PC (publik, dari /data/payout-penambang node-penambang saat Q181); tidak ada kunci rahasia di VPS.
+    image: zevrigo:regtest
+    pull_policy: never
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        case "$$ZVRG_PAYOUT" in *[!0-9a-f]* | "") echo "penambang-cadangan: ZVRG_PAYOUT tidak sah, tidak menambang"; exec sleep infinity ;; esac
+        [ "$${#ZVRG_PAYOUT}" -eq 64 ] || { echo "penambang-cadangan: ZVRG_PAYOUT bukan 64 hex, tidak menambang"; exec sleep infinity; }
+        echo "penambang-cadangan: menambang satu blok bila tinggi tidak naik $$ZVRG_DIAM detik"
+        last=""; since=$$(date +%s)
+        while :; do
+          h=$$(zevrigo-cli info 2>/dev/null | sed -n 's/^tinggi: //p')
+          now=$$(date +%s)
+          if [ -n "$$h" ] && [ "$$h" != "$$last" ]; then last=$$h; since=$$now; fi
+          if [ -n "$$h" ] && [ $$((now - since)) -ge "$$ZVRG_DIAM" ]; then
+            echo "penambang-cadangan: tinggi $$h diam $$((now - since)) detik, menambang satu blok"
+            zevrigo-miner --payout "$$ZVRG_PAYOUT" --blocks 1 || echo "penambang-cadangan: putaran gagal, dicoba lagi"
+            since=$$(date +%s)
+          fi
+          sleep 30
+        done
+    environment:
+      ZVRG_PAYOUT: "63b0190ce3e9dc8e127985e72ff265b25044b1fe0130ce76d28b50dfcd3770c5"
+      ZVRG_DIAM: ${ZVRG_DIAM:-300}
+    network_mode: "service:node"
+    init: true
+    depends_on:
+      - node
+    mem_limit: 128m
+    cpus: 0.5
+    stop_grace_period: 10s
+    restart: unless-stopped
+
   blog:
     profiles: ["vps"]
     # TSK-M64 (DEC-37): blog statis repo zevrigo-blog lewat zevrigo-demo mode web, di namespace node seed, mendengar
