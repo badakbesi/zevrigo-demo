@@ -4,10 +4,13 @@
 //! - Kunci faucet: frasa 24 kata di `<datadir>/faucet-frasa.txt` (dibuat sekali, izin `0600`), jalur `m/44'/1'/0'/0/0`
 //!   seperti wallet CLI. Wallet ini panas (kunci di server) dan hanya untuk regtest; isinya dari kantong Faucet treasury
 //!   lewat isi ulang manual.
-//! - Batas: satu kali per pengunjung per hari UTC, satu kali per alamat per hari UTC, dan [`Settings::daily_limit`]
-//!   kiriman per hari. Batas alamat dan batas harian disimpan di `<datadir>/faucet-batas.json` (isi: hari, jumlah, alamat
-//!   penerima hari itu) sehingga tetap berlaku setelah restart. Pengunjung hanya dikenali lewat hash alamat IP dengan
-//!   kunci acak per hari di memori: alamat IP tidak disimpan, tidak dicatat, dan hilang saat restart.
+//! - Batas (Q182, pencipta 22 November 2026): satu kali per alamat per 24 jam sejak kiriman terakhir ke alamat itu,
+//!   [`Settings::visitor_limit`] kali per pengunjung per 24 jam (jendela bergeser [`CLAIM_WINDOW_SECONDS`]), dan
+//!   [`Settings::daily_limit`] kiriman per hari UTC untuk semua pengunjung. Batas alamat dan batas harian disimpan di
+//!   `<datadir>/faucet-batas.json` (isi: hari, jumlah, alamat penerima 24 jam terakhir dengan waktu kirimnya) sehingga
+//!   tetap berlaku setelah restart. Pengunjung hanya dikenali lewat hash alamat IP dengan kunci acak di memori (dibuat
+//!   saat start); hash yang kirimannya lebih tua dari 24 jam dibuang. Alamat IP tidak disimpan, tidak dicatat, dan hilang
+//!   saat restart.
 //! - Kiriman berantai lewat mempool: kembalian kiriman yang belum masuk blok langsung bisa dipakai kiriman berikutnya.
 //!   Outpoint yang sudah dibelanjakan kiriman sendiri dicatat di memori. Setelah start, faucet menunggu sampai mempool
 //!   tidak lagi memuat transaksi faucet (paling lama satu blok) sebelum mengirim lagi ([`FaucetError::Busy`]).
@@ -16,7 +19,7 @@
 //!   dari [`CLIENT_IP_HEADER`] hanya dipakai untuk koneksi dari alamat proxy tepercaya ([`faucet_client_ip`]).
 //! - Privasi: log hanya start, berhenti, txid kiriman, dan galat node. Tanpa alamat penerima dan tanpa alamat IP.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{BuildHasher, RandomState};
 use std::io::{Read as _, Write as _};
 use std::net::{IpAddr, SocketAddr};
@@ -54,6 +57,13 @@ pub const STATE_FILE: &str = "faucet-batas.json";
 
 /// Panjang satu hari batas faucet (hari UTC).
 pub const SECONDS_PER_DAY: u64 = 86_400;
+
+/// Jendela batas alamat dan batas pengunjung (24 jam, bergeser, Q182): alamat yang sama boleh menerima lagi
+/// [`CLAIM_WINDOW_SECONDS`] detik sesudah kiriman terakhir ke alamat itu.
+pub const CLAIM_WINDOW_SECONDS: u64 = 86_400;
+
+/// Kiriman paling banyak per pengunjung dalam [`CLAIM_WINDOW_SECONDS`] di layanan faucet (Q182).
+pub const VISITOR_LIMIT: u32 = 5;
 
 /// Jalur HTTP faucet.
 pub const FAUCET_PATH: &str = "/api/v1/faucet";
@@ -104,12 +114,18 @@ pub enum FaucetError {
     /// Batas kiriman harian sudah habis.
     #[error("batas harian faucet sudah habis, coba lagi besok (00.00 UTC)")]
     DailyLimit,
-    /// Pengunjung ini sudah menerima koin hari ini.
-    #[error("pengunjung ini sudah menerima koin hari ini, coba lagi besok (00.00 UTC)")]
-    VisitorLimit,
-    /// Alamat ini sudah menerima koin hari ini.
-    #[error("alamat ini sudah menerima koin hari ini, coba lagi besok (00.00 UTC)")]
-    AddressLimit,
+    /// Pengunjung ini sudah mencapai [`Settings::visitor_limit`] kiriman dalam 24 jam terakhir.
+    #[error("batas pengunjung 24 jam sudah habis")]
+    VisitorLimit {
+        /// Detik sampai pengunjung ini boleh meminta lagi.
+        retry_after: u64,
+    },
+    /// Alamat ini sudah menerima koin dalam 24 jam terakhir.
+    #[error("alamat ini sudah menerima koin dalam 24 jam terakhir")]
+    AddressLimit {
+        /// Detik sampai alamat ini boleh menerima lagi.
+        retry_after: u64,
+    },
     /// Saldo faucet yang bisa dipakai tidak cukup.
     #[error("saldo faucet habis, tunggu isi ulang")]
     Empty,
@@ -144,8 +160,8 @@ impl FaucetError {
             Self::BadAddress => "bad_address",
             Self::OwnAddress => "own_address",
             Self::DailyLimit => "daily_limit",
-            Self::VisitorLimit => "visitor_limit",
-            Self::AddressLimit => "address_limit",
+            Self::VisitorLimit { .. } => "visitor_limit",
+            Self::AddressLimit { .. } => "address_limit",
             Self::Empty => "empty",
             Self::Busy => "busy",
             Self::NodeUnreachable(_) => "node_unreachable",
@@ -160,7 +176,7 @@ impl FaucetError {
     pub const fn http_status(&self) -> u16 {
         match self {
             Self::BadAddress | Self::OwnAddress => 400,
-            Self::DailyLimit | Self::VisitorLimit | Self::AddressLimit => 429,
+            Self::DailyLimit | Self::VisitorLimit { .. } | Self::AddressLimit { .. } => 429,
             Self::Empty
             | Self::Busy
             | Self::NodeUnreachable(_)
@@ -180,9 +196,45 @@ impl FaucetError {
             | Self::Key(_)
             | Self::State(_)
             | Self::Internal(_) => "faucet sedang bermasalah, coba lagi nanti".to_owned(),
+            Self::VisitorLimit { retry_after } | Self::AddressLimit { retry_after } => {
+                format!("{self}, coba lagi {} lagi", wait_text(*retry_after))
+            }
             other => other.to_string(),
         }
     }
+
+    /// Detik sampai permintaan boleh diulang (batas pengunjung dan batas alamat), untuk `retry_after` dan kepala
+    /// `Retry-After` jawaban HTTP.
+    #[must_use]
+    pub const fn retry_after(&self) -> Option<u64> {
+        match self {
+            Self::VisitorLimit { retry_after } | Self::AddressLimit { retry_after } => {
+                Some(*retry_after)
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Lama tunggu untuk pesan pengunjung, menit dibulatkan ke atas: misalnya `5 menit`, `1 jam`, `23 jam 59 menit`.
+fn wait_text(seconds: u64) -> String {
+    let minutes = seconds.div_ceil(60).max(1);
+    let (hours, rest) = (minutes / 60, minutes % 60);
+    match (hours, rest) {
+        (0, _) => format!("{rest} menit"),
+        (_, 0) => format!("{hours} jam"),
+        _ => format!("{hours} jam {rest} menit"),
+    }
+}
+
+/// Apakah kiriman pada waktu `at` masih dihitung batas 24 jam pada waktu `now` (detik Unix).
+const fn still_counted(at: u64, now: u64) -> bool {
+    at.saturating_add(CLAIM_WINDOW_SECONDS) > now
+}
+
+/// Detik sampai kiriman pada waktu `at` tidak dihitung lagi.
+const fn wait_after(at: u64, now: u64) -> u64 {
+    at.saturating_add(CLAIM_WINDOW_SECONDS).saturating_sub(now)
 }
 
 /// Pengaturan kiriman faucet.
@@ -194,6 +246,8 @@ pub struct Settings {
     pub fee_rate: u128,
     /// Kiriman paling banyak per hari UTC.
     pub daily_limit: u32,
+    /// Kiriman paling banyak per pengunjung dalam [`CLAIM_WINDOW_SECONDS`].
+    pub visitor_limit: u32,
 }
 
 /// Satu kiriman yang sudah diterima node.
@@ -234,6 +288,8 @@ pub struct FaucetStatus {
     pub balance: Amount,
     /// Kiriman paling banyak per hari UTC.
     pub daily_limit: u32,
+    /// Kiriman paling banyak per pengunjung dalam [`CLAIM_WINDOW_SECONDS`].
+    pub visitor_limit: u32,
     /// Sisa kiriman hari ini.
     pub remaining_today: u32,
     /// Mempool sudah diperiksa setelah start (lihat [`FaucetError::Busy`]).
@@ -254,6 +310,8 @@ impl FaucetStatus {
             "balance": self.balance.as_quanta().to_string(),
             "balance_zvrg": self.balance.to_zvrg_string(),
             "daily_limit": self.daily_limit,
+            "visitor_limit": self.visitor_limit,
+            "claim_window_seconds": CLAIM_WINDOW_SECONDS,
             "remaining_today": self.remaining_today,
             "synced": self.synced,
             "ready": self.ready,
@@ -262,12 +320,13 @@ impl FaucetStatus {
     }
 }
 
-/// Batas yang disimpan di [`STATE_FILE`]: hari UTC, jumlah kiriman, dan alamat penerima hari itu.
+/// Batas yang disimpan di [`STATE_FILE`]: hari UTC dan jumlah kiriman hari itu (batas harian), serta alamat penerima 24 jam
+/// terakhir dengan waktu kiriman terakhirnya dalam detik Unix (batas alamat).
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Ledger {
     day: u64,
     count: u32,
-    addresses: BTreeSet<String>,
+    addresses: BTreeMap<String, u64>,
 }
 
 impl Ledger {
@@ -275,25 +334,32 @@ impl Ledger {
         Self {
             day,
             count: 0,
-            addresses: BTreeSet::new(),
+            addresses: BTreeMap::new(),
         }
     }
 }
 
-/// Pengunjung yang sudah menerima hari ini: hash alamat dengan kunci acak per hari, hanya di memori.
+/// Pengunjung yang menerima dalam 24 jam terakhir: hash alamat dengan kunci acak (dibuat saat start) dan waktu tiap
+/// kirimannya, hanya di memori. Hash yang semua kirimannya lebih tua dari 24 jam dibuang ([`Visitors::prune`]).
 struct Visitors {
-    day: u64,
     keys: RandomState,
-    seen: HashSet<u64>,
+    claims: HashMap<u64, Vec<u64>>,
 }
 
 impl Visitors {
-    fn new(day: u64) -> Self {
+    fn start() -> Self {
         Self {
-            day,
             keys: RandomState::new(),
-            seen: HashSet::new(),
+            claims: HashMap::new(),
         }
+    }
+
+    /// Membuang kiriman yang lebih tua dari [`CLAIM_WINDOW_SECONDS`] pada waktu `now`.
+    fn prune(&mut self, now: u64) {
+        self.claims.retain(|_, times| {
+            times.retain(|&at| still_counted(at, now));
+            !times.is_empty()
+        });
     }
 }
 
@@ -353,7 +419,9 @@ fn faucet_keys(mnemonic: &Mnemonic) -> Result<(ExtendedPrivKey, [u8; 32]), Fauce
     Ok((account, payload))
 }
 
-/// Membaca [`STATE_FILE`]. File yang tidak ada atau berisi hari lain berarti batas kosong untuk `day`.
+/// Membaca [`STATE_FILE`]. File yang tidak ada berarti batas kosong untuk `day`; jumlah kiriman hari lain tidak dihitung
+/// lagi. Versi 1 (sebelum Q182: alamat penerima satu hari UTC tanpa waktu kirim) dibaca dengan waktu kirim 00.00 UTC hari
+/// itu, sehingga alamat tersebut boleh menerima lagi mulai 00.00 UTC berikutnya seperti aturan lama.
 fn load_ledger(path: &Path, day: u64) -> Result<Ledger, FaucetError> {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
@@ -370,23 +438,25 @@ fn load_ledger(path: &Path, day: u64) -> Result<Ledger, FaucetError> {
         .get("jumlah")
         .and_then(Value::as_u64)
         .and_then(|count| u32::try_from(count).ok());
-    let addresses = value
-        .get("alamat")
-        .and_then(Value::as_array)
-        .and_then(|list| {
-            list.iter()
-                .map(|item| item.as_str().map(str::to_owned))
-                .collect::<Option<BTreeSet<String>>>()
-        });
-    match (version, stored_day, count, addresses) {
-        (Some(1), Some(stored), Some(count), Some(addresses)) => Ok(if stored == day {
-            Ledger {
-                day,
-                count,
-                addresses,
-            }
-        } else {
-            Ledger::empty(day)
+    let addresses = match (version, stored_day, value.get("alamat")) {
+        (Some(1), Some(stored), Some(Value::Array(list))) => list
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .map(|address| (address.to_owned(), stored.saturating_mul(SECONDS_PER_DAY)))
+            })
+            .collect::<Option<BTreeMap<String, u64>>>(),
+        (Some(2), Some(_), Some(Value::Object(map))) => map
+            .iter()
+            .map(|(address, at)| at.as_u64().map(|at| (address.clone(), at)))
+            .collect::<Option<BTreeMap<String, u64>>>(),
+        _ => None,
+    };
+    match (stored_day, count, addresses) {
+        (Some(stored), Some(count), Some(addresses)) => Ok(Ledger {
+            day,
+            count: if stored == day { count } else { 0 },
+            addresses,
         }),
         _ => Err(FaucetError::State(
             "isi tidak sah (hapus file ini untuk memulai batas hari ini dari nol)".to_owned(),
@@ -397,10 +467,10 @@ fn load_ledger(path: &Path, day: u64) -> Result<Ledger, FaucetError> {
 /// Menulis [`STATE_FILE`] lewat file sementara lalu rename.
 fn save_ledger(path: &Path, ledger: &Ledger) -> Result<(), FaucetError> {
     let value = json!({
-        "versi": 1,
+        "versi": 2,
         "hari": ledger.day,
         "jumlah": ledger.count,
-        "alamat": ledger.addresses.iter().collect::<Vec<_>>(),
+        "alamat": ledger.addresses,
     });
     let temporary = path.with_extension("json.baru");
     std::fs::write(&temporary, format!("{value}\n"))
@@ -464,7 +534,7 @@ impl Faucet {
             settings,
             state_path,
             ledger,
-            visitors: Visitors::new(day),
+            visitors: Visitors::start(),
             pending: BTreeSet::new(),
             synced: false,
             genesis_checked: false,
@@ -484,15 +554,18 @@ impl Faucet {
         &self.settings
     }
 
-    /// Mengosongkan batas jika hari UTC sudah berganti.
+    /// Batas pada waktu `now`: jumlah harian kosong lagi jika hari UTC sudah berganti; alamat dan pengunjung yang
+    /// kirimannya lebih tua dari 24 jam dibuang.
     fn roll(&mut self, now: u64) {
         let day = now / SECONDS_PER_DAY;
         if self.ledger.day != day {
-            self.ledger = Ledger::empty(day);
+            self.ledger.day = day;
+            self.ledger.count = 0;
         }
-        if self.visitors.day != day {
-            self.visitors = Visitors::new(day);
-        }
+        self.ledger
+            .addresses
+            .retain(|_, at| still_counted(*at, now));
+        self.visitors.prune(now);
     }
 
     /// Memeriksa node (jaringan regtest, genesis regtest) lalu mengumpulkan koin faucet: UTXO yang belum dibelanjakan
@@ -610,6 +683,7 @@ impl Faucet {
             amount: self.settings.amount,
             balance: view.spendable,
             daily_limit: self.settings.daily_limit,
+            visitor_limit: self.settings.visitor_limit,
             remaining_today,
             synced: self.synced,
             ready: self.synced && remaining_today > 0 && view.spendable > self.settings.amount,
@@ -618,7 +692,7 @@ impl Faucet {
 
     /// Mengirim [`Settings::amount`] ke `address` untuk pengunjung `visitor` pada waktu `now` (detik Unix).
     ///
-    /// Urutan pemeriksaan: alamat, batas harian, pengunjung, alamat hari ini, node, saldo. Batas hanya terpakai jika node
+    /// Urutan pemeriksaan: alamat, batas harian, pengunjung, alamat 24 jam terakhir, node, saldo. Batas hanya terpakai jika node
     /// menerima transaksi.
     ///
     /// # Errors
@@ -641,11 +715,21 @@ impl Faucet {
             return Err(FaucetError::DailyLimit);
         }
         let visitor_key = self.visitors.keys.hash_one(visitor);
-        if self.visitors.seen.contains(&visitor_key) {
-            return Err(FaucetError::VisitorLimit);
+        let claims = self
+            .visitors
+            .claims
+            .get(&visitor_key)
+            .map_or(&[][..], Vec::as_slice);
+        if claims.len() >= usize::try_from(self.settings.visitor_limit).unwrap_or(usize::MAX) {
+            let oldest = claims.iter().min().copied().unwrap_or(now);
+            return Err(FaucetError::VisitorLimit {
+                retry_after: wait_after(oldest, now),
+            });
         }
-        if self.ledger.addresses.contains(&canonical) {
-            return Err(FaucetError::AddressLimit);
+        if let Some(&at) = self.ledger.addresses.get(&canonical) {
+            return Err(FaucetError::AddressLimit {
+                retry_after: wait_after(at, now),
+            });
         }
         let view = self.view().await?;
         if !self.synced {
@@ -673,9 +757,13 @@ impl Faucet {
             .await
             .map_err(|error| node_error(&error))?;
         self.pending.extend(plan.coins().iter().map(Coin::outpoint));
-        self.visitors.seen.insert(visitor_key);
+        self.visitors
+            .claims
+            .entry(visitor_key)
+            .or_default()
+            .push(now);
         self.ledger.count = self.ledger.count.saturating_add(1);
-        self.ledger.addresses.insert(canonical.clone());
+        self.ledger.addresses.insert(canonical.clone(), now);
         if let Err(error) = save_ledger(&self.state_path, &self.ledger) {
             tracing::warn!(%error, "file batas faucet gagal disimpan");
         }
@@ -770,13 +858,21 @@ fn reply(status: StatusCode, value: &Value) -> Response {
         .into_response()
 }
 
+/// Jawaban galat `{"error", "message"}`; batas pengunjung dan alamat juga `retry_after` (detik) dan kepala `Retry-After`.
 fn error_reply(error: &FaucetError) -> Response {
     let status =
         StatusCode::from_u16(error.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    reply(
-        status,
-        &json!({"error": error.code(), "message": error.public_message()}),
-    )
+    let mut body = json!({"error": error.code(), "message": error.public_message()});
+    if let Some(seconds) = error.retry_after() {
+        body["retry_after"] = json!(seconds);
+    }
+    let mut response = reply(status, &body);
+    if let Some(seconds) = error.retry_after() {
+        response
+            .headers_mut()
+            .insert(header::RETRY_AFTER, HeaderValue::from(seconds));
+    }
+    response
 }
 
 /// Kepala `Origin` jika ada di daftar izin.
@@ -938,6 +1034,7 @@ async fn serve(config: &FaucetConfig) -> Result<(), DemoError> {
         amount: config.amount,
         fee_rate: config.fee_rate,
         daily_limit: config.daily_limit,
+        visitor_limit: VISITOR_LIMIT,
     };
     let faucet = Faucet::open(
         client,

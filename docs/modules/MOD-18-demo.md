@@ -35,10 +35,12 @@ yang dijalankan sebagai tiga proses di belakang Cloudflare Tunnel, masing-masing
   faucet demo di `127.0.0.1:28805` (bawaan). Wallet panas regtest: frasa 24 kata di `<datadir>/faucet-frasa.txt` (dibuat
   sekali, izin `0600`), alamat `m/44'/1'/0'/0/0` yang juga menjadi alamat kembalian; isi ulang manual dari kantong Faucet.
   `GET /api/v1/faucet`: alamat, jumlah per kiriman, saldo, sisa hari ini, siap/tidak. `POST /api/v1/faucet` badan
-  `{"address": "rzvrg1..."}`: kirim `--jumlah` (bawaan 100 ZVRG) dengan pemilihan koin MOD-09. Batas: sekali per pengunjung
-  dan sekali per alamat per hari UTC, `--batas-harian` kiriman (bawaan 100); batas alamat dan harian disimpan di
-  `<datadir>/faucet-batas.json` (hari, jumlah, alamat penerima), pengunjung hanya sebagai hash alamat IP dengan kunci acak per
-  hari di memori. Kiriman berantai lewat mempool (kembalian yang belum masuk blok langsung dipakai); setelah start, faucet
+  `{"address": "rzvrg1..."}`: kirim `--jumlah` (bawaan 100 ZVRG) dengan pemilihan koin MOD-09. Batas (TSK-M72, Q182): sekali per alamat
+  per 24 jam sejak kiriman terakhir ke alamat itu, paling banyak 5 kali per pengunjung per 24 jam (jendela bergeser), dan
+  `--batas-harian` kiriman per hari UTC (bawaan 100); batas alamat dan harian disimpan di `<datadir>/faucet-batas.json` versi 2
+  (hari, jumlah, alamat penerima dengan waktu kirim; versi 1 tetap dibaca), pengunjung hanya sebagai hash alamat IP dengan
+  kunci acak di memori yang dibuang sesudah 24 jam. Galat batas pengunjung dan alamat memuat `retry_after` (detik) dan kepala
+  `Retry-After`. Kiriman berantai lewat mempool (kembalian yang belum masuk blok langsung dipakai); setelah start, faucet
   menunggu sampai mempool bersih dari transaksi faucet (`busy`). Galat JSON `{"error", "message"}`: `400` alamat, `429` batas
   dan laju (bawaan 2 per detik), `503` kosong, sibuk, atau node, tanpa rincian node. CORS hanya untuk `--allow-origin`
   (bawaan explorer publik). `CF-Connecting-IP` dipercaya hanya dari alamat `--trust-proxy-host` (di-resolve ulang tiap 60

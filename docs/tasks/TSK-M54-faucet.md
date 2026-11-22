@@ -40,3 +40,8 @@ penerima tepat 100 ZVRG, faucet satu UTXO = 500.000 ZVRG − biaya upacara − b
   Alamat diperiksa bech32m di peramban; galat faucet ditampilkan dengan teks Indonesia dan Inggris.
 - Berikutnya: anti-bot (misalnya Cloudflare Turnstile, layanan pihak ketiga yang butuh persetujuan pencipta) bila jatah
   harian sering habis oleh bot. Tombol faucet di APK Wallet: TSK-M58.
+
+## Perubahan batas (TSK-M72, Q182, 22 November 2026)
+Pencipta: faucet terasa hanya bisa diambil sekali. Batas sekarang sekali per alamat per 24 jam sejak kiriman terakhir, paling
+banyak 5 kali per pengunjung per 24 jam (jendela bergeser), dan batas harian semua pengunjung tetap per hari UTC. Rincian di
+[TSK-M72](TSK-M72-faucet-24-jam.md).

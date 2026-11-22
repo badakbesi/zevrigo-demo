@@ -1,7 +1,8 @@
 # Zevrigo Demo (MOD-18)
 
 Layanan jaringan demo regtest Zevrigo Coin (DEC-34, DEC-36): `zevrigo-demo rpc` (gerbang RPC aman untuk wallet peserta,
-`https://zevrigo-rpc.ratuaurion.store`), `faucet` (100 ZVRG demo per pengunjung per hari), `upacara` (alat upacara genesis
+`https://zevrigo-rpc.ratuaurion.store`), `faucet` (100 ZVRG demo per permintaan, sekali per alamat
+dan paling banyak 5 kali per pengunjung dalam 24 jam), `upacara` (alat upacara genesis
 regtest), dan `web` (penyaji situs statis untuk blog). Koin demo tidak bernilai.
 
 Repo ini bagian dari **zevrigo_lab**: crate inti dari repo inti `zevrigo` di folder sebelah (`../zevrigo`). Aturan proyek:

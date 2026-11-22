@@ -20,8 +20,9 @@ use zevrigo_rpc::{
 use zevrigo_wallet_core::{decode_address, encode_address};
 
 use super::{
-    CLIENT_IP_HEADER, FAUCET_PATH, Faucet, FaucetError, FaucetStatus, KEY_FILE, Payout,
-    RandomSource, RouterOptions, SECONDS_PER_DAY, STATE_FILE, Settings, faucet_client_ip, router,
+    CLAIM_WINDOW_SECONDS, CLIENT_IP_HEADER, FAUCET_PATH, Faucet, FaucetError, FaucetStatus,
+    KEY_FILE, Payout, RandomSource, RouterOptions, SECONDS_PER_DAY, STATE_FILE, Settings,
+    faucet_client_ip, router, wait_text,
 };
 use crate::limit::Limits;
 use crate::upacara::REGTEST_NETWORK_ID;
@@ -46,6 +47,7 @@ fn settings(daily_limit: u32) -> Settings {
         amount: zvrg(100),
         fee_rate: 1,
         daily_limit,
+        visitor_limit: 1,
     }
 }
 
@@ -431,11 +433,15 @@ fn payouts_chain_through_mempool_and_respect_limits() {
     assert!(first.fee > Amount::ZERO && first.fee < Amount::from_quanta(1_000));
     assert_eq!(
         fx.request(&mut faucet, &b, 1, NOW),
-        Err(FaucetError::VisitorLimit)
+        Err(FaucetError::VisitorLimit {
+            retry_after: CLAIM_WINDOW_SECONDS
+        })
     );
     assert_eq!(
         fx.request(&mut faucet, &format!(" {a} "), 2, NOW),
-        Err(FaucetError::AddressLimit)
+        Err(FaucetError::AddressLimit {
+            retry_after: CLAIM_WINDOW_SECONDS
+        })
     );
     let second = fx.request(&mut faucet, &b, 2, NOW).unwrap();
     let third = fx.request(&mut faucet, &c, 3, NOW).unwrap();
@@ -488,13 +494,15 @@ fn payouts_chain_through_mempool_and_respect_limits() {
     assert_eq!(status.remaining_today, 0);
     assert!(status.synced && !status.ready);
 
-    // Batas tersimpan: hari, jumlah, dan alamat penerima saja.
+    // Batas tersimpan: hari, jumlah, dan alamat penerima dengan waktu kirim saja.
     let saved: Value = serde_json::from_str(&fx.read(STATE_FILE)).unwrap();
-    assert_eq!(saved["versi"], json!(1));
+    assert_eq!(saved["versi"], json!(2));
     assert_eq!(saved["hari"], json!(NOW / SECONDS_PER_DAY));
     assert_eq!(saved["jumlah"], json!(3));
-    let mut expected = vec![a, b, c];
-    expected.sort();
+    let expected: BTreeMap<String, u64> = [a, b, c]
+        .into_iter()
+        .map(|address| (address, NOW))
+        .collect();
     assert_eq!(saved["alamat"], json!(expected));
     assert!(!fx.read(STATE_FILE).contains("198.51.100"));
     fx.finish();
@@ -522,23 +530,124 @@ fn limits_survive_restart_and_reset_next_day() {
     // Batas alamat tersimpan di file; pengunjung hanya di memori sehingga mulai dari nol.
     assert_eq!(
         fx.request(&mut faucet, &a, 5, NOW),
-        Err(FaucetError::AddressLimit)
+        Err(FaucetError::AddressLimit {
+            retry_after: CLAIM_WINDOW_SECONDS
+        })
     );
     fx.request(&mut faucet, &c, 1, NOW).unwrap();
     assert_eq!(fx.status(&mut faucet, NOW).remaining_today, 7);
 
-    // Hari UTC berikutnya: semua batas kosong lagi.
-    let tomorrow = NOW + SECONDS_PER_DAY;
+    // 24 jam kemudian (sudah hari UTC berikutnya): batas alamat, pengunjung, dan harian kosong lagi.
+    let tomorrow = NOW + CLAIM_WINDOW_SECONDS;
     fx.request(&mut faucet, &a, 1, tomorrow).unwrap();
     let status = fx.status(&mut faucet, tomorrow);
     assert_eq!(status.remaining_today, 9);
     let saved: Value = serde_json::from_str(&fx.read(STATE_FILE)).unwrap();
     assert_eq!(saved["hari"], json!(tomorrow / SECONDS_PER_DAY));
-    assert_eq!(saved["alamat"], json!([a]));
+    assert_eq!(
+        saved["alamat"],
+        json!(BTreeMap::from([(a.clone(), tomorrow)]))
+    );
 
     // File batas rusak: faucet tidak start (tidak diam-diam mengosongkan batas).
     std::fs::write(fx.dir.join(STATE_FILE), "{}\n").unwrap();
     assert!(matches!(fx.open(3), Err(FaucetError::State(_))));
+    fx.finish();
+}
+
+#[test]
+fn address_and_visitor_limits_use_a_moving_24_hour_window() {
+    let fx = Fixture::new("jendela", Node::regtest());
+    let mut faucet = Faucet::open(
+        fx.client(&fx.url),
+        &fx.dir,
+        Settings {
+            visitor_limit: 2,
+            ..settings(100)
+        },
+        random(9),
+        NOW,
+    )
+    .unwrap();
+    fx.node.fund(payload_of(faucet.address()), 1_000, 0x42);
+    let status = fx.status(&mut faucet, NOW);
+    assert_eq!(status.visitor_limit, 2);
+    assert_eq!(status.to_json()["visitor_limit"], json!(2));
+    assert_eq!(
+        status.to_json()["claim_window_seconds"],
+        json!(CLAIM_WINDOW_SECONDS)
+    );
+    let (a, b, c, d) = (
+        recipient(0x11),
+        recipient(0x22),
+        recipient(0x33),
+        recipient(0x44),
+    );
+
+    // Satu pengunjung: dua alamat dalam 24 jam; yang ketiga ditolak sampai kiriman pertamanya lewat 24 jam.
+    fx.request(&mut faucet, &a, 1, NOW).unwrap();
+    fx.request(&mut faucet, &b, 1, NOW + 600).unwrap();
+    assert_eq!(
+        fx.request(&mut faucet, &c, 1, NOW + 1_200),
+        Err(FaucetError::VisitorLimit {
+            retry_after: CLAIM_WINDOW_SECONDS - 1_200
+        })
+    );
+    // Alamat yang sama dari pengunjung lain menunggu 24 jam sejak kiriman terakhir ke alamat itu, bukan 00.00 UTC.
+    assert_eq!(
+        fx.request(&mut faucet, &a, 2, NOW + 3_600),
+        Err(FaucetError::AddressLimit {
+            retry_after: CLAIM_WINDOW_SECONDS - 3_600
+        })
+    );
+    assert_eq!(
+        fx.request(&mut faucet, &a, 2, NOW + CLAIM_WINDOW_SECONDS - 1),
+        Err(FaucetError::AddressLimit { retry_after: 1 })
+    );
+    fx.request(&mut faucet, &a, 2, NOW + CLAIM_WINDOW_SECONDS)
+        .unwrap();
+    // Kiriman pertama pengunjung 1 sudah lewat 24 jam: satu jatah kembali; kiriman kedua (NOW + 600) masih dihitung.
+    fx.request(&mut faucet, &c, 1, NOW + CLAIM_WINDOW_SECONDS)
+        .unwrap();
+    assert_eq!(
+        fx.request(&mut faucet, &d, 1, NOW + CLAIM_WINDOW_SECONDS),
+        Err(FaucetError::VisitorLimit { retry_after: 600 })
+    );
+    fx.finish();
+}
+
+#[test]
+fn state_file_version_1_keeps_the_old_daily_rule() {
+    let fx = Fixture::new("versi1", Node::regtest());
+    let (a, b) = (recipient(0x11), recipient(0x22));
+    let day = NOW / SECONDS_PER_DAY;
+    std::fs::create_dir_all(&fx.dir).unwrap();
+    let old = json!({"versi": 1, "hari": day, "jumlah": 2, "alamat": [a.clone()]});
+    std::fs::write(fx.dir.join(STATE_FILE), format!("{old}\n")).unwrap();
+    let mut faucet = fx.open(3).unwrap();
+    fx.node.fund(payload_of(faucet.address()), 1_000, 0x42);
+    assert_eq!(fx.status(&mut faucet, NOW).remaining_today, 1);
+
+    // Alamat dari file versi 1 tercatat sejak 00.00 UTC hari itu: boleh lagi mulai 00.00 UTC berikutnya.
+    let midnight = (day + 1) * SECONDS_PER_DAY;
+    assert_eq!(
+        fx.request(&mut faucet, &a, 1, NOW),
+        Err(FaucetError::AddressLimit {
+            retry_after: midnight - NOW
+        })
+    );
+    fx.request(&mut faucet, &b, 1, NOW).unwrap();
+    let saved: Value = serde_json::from_str(&fx.read(STATE_FILE)).unwrap();
+    assert_eq!(saved["versi"], json!(2));
+    assert_eq!(saved["jumlah"], json!(3));
+    assert_eq!(
+        saved["alamat"],
+        json!(BTreeMap::from([
+            (a.clone(), day * SECONDS_PER_DAY),
+            (b, NOW)
+        ]))
+    );
+    fx.request(&mut faucet, &a, 2, midnight).unwrap();
     fx.finish();
 }
 
@@ -701,6 +810,7 @@ fn http_serves_status_payouts_and_cors() {
             .as_str()
             .is_some_and(|text| !text.is_empty())
     );
+    assert_eq!(body["retry_after"], json!(CLAIM_WINDOW_SECONDS));
     assert_eq!(post(addr, &b, Some("198.51.100.2")).0, 200);
     let (status, body) = post(addr, &a, Some("198.51.100.3"));
     assert_eq!(
@@ -824,7 +934,11 @@ fn http_rate_limit_and_client_ip() {
     // Kode dan status HTTP galat; rincian galat node tidak sampai ke pengunjung.
     for (error, code, status) in [
         (FaucetError::BadAddress, "bad_address", 400),
-        (FaucetError::VisitorLimit, "visitor_limit", 429),
+        (
+            FaucetError::VisitorLimit { retry_after: 60 },
+            "visitor_limit",
+            429,
+        ),
         (FaucetError::Empty, "empty", 503),
         (FaucetError::Busy, "busy", 503),
         (
@@ -836,5 +950,24 @@ fn http_rate_limit_and_client_ip() {
     ] {
         assert_eq!((error.code(), error.http_status()), (code, status));
         assert!(!error.public_message().contains("rahasia"));
+    }
+    assert_eq!(
+        FaucetError::AddressLimit { retry_after: 61 }.retry_after(),
+        Some(61)
+    );
+    assert_eq!(FaucetError::Busy.retry_after(), None);
+    assert_eq!(
+        FaucetError::VisitorLimit { retry_after: 3_600 }.public_message(),
+        "batas pengunjung 24 jam sudah habis, coba lagi 1 jam lagi"
+    );
+    for (seconds, text) in [
+        (0, "1 menit"),
+        (59, "1 menit"),
+        (61, "2 menit"),
+        (3_600, "1 jam"),
+        (86_340, "23 jam 59 menit"),
+        (86_400, "24 jam"),
+    ] {
+        assert_eq!(wait_text(seconds), text);
     }
 }

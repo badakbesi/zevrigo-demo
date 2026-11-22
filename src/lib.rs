@@ -7,8 +7,8 @@
 //!   batas laju per pengunjung ([`limit`]) tanpa menyimpan alamat IP.
 //! - `upacara` ([`upacara`], TSK-M62): alat operator sekali pakai, upacara genesis regtest (alokasi genesis ke kantong
 //!   treasury). Bukan layanan dan tidak dibuka ke publik.
-//! - `faucet` ([`faucet`], TSK-M54 bagian A): faucet demo, 100 ZVRG per pengunjung per hari dari wallet faucet, dengan
-//!   batas per alamat dan batas harian. Tanpa menyimpan alamat IP.
+//! - `faucet` ([`faucet`], TSK-M54 bagian A, TSK-M72): faucet demo, 100 ZVRG per permintaan dari wallet faucet, sekali per
+//!   alamat dan paling banyak 5 kali per pengunjung dalam 24 jam, dengan batas harian. Tanpa menyimpan alamat IP.
 //! - `web` ([`site`], TSK-M64): situs statis, misalnya blog resmi `apps/blog`, dengan aturan penyajian yang sama dengan
 //!   explorer (jalur aman, kebijakan keamanan konten dengan hash skrip inline).
 //! - `daftar` (TSK-M55): belum tersedia.

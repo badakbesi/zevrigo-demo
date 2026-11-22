@@ -161,13 +161,15 @@ tinggi buka berikutnya; grafik koin terkunci per tinggi buka (tokenomik v0.1 Bag
 
 ### 4.7 Faucet
 - Satu layanan di namespace node faucet (memakai RPC node faucet lewat loopback), dua pintu: halaman di explorer dan tombol
-  di APK Wallet. Batas 100 ZVRG per pengunjung per hari dan per alamat.
+  di APK Wallet. Batas 100 ZVRG per permintaan: sekali per alamat dan paling banyak 5 kali
+  per pengunjung dalam 24 jam (TSK-M72, Q182; sebelumnya sekali per pengunjung dan per alamat per hari UTC).
 - `cloudflared` (namespace seed) menjangkau faucet lewat jaringan Docker internal; route publik ke `http://node-faucet:28805`.
   Faucet mendengar di antarmuka jaringan Docker, bukan port host, dan mempercayai `CF-Connecting-IP` hanya dari alamat
   namespace seed. Cara menetapkan alamat itu (nama layanan saat berjalan atau alamat tetap jaringan compose) dipilih di
   task faucet. Konektor `cloudflared` kedua dengan token yang sama tidak dipakai, karena Cloudflare membagi permintaan ke
   semua konektor.
-- Pengunjung dikenali tanpa menyimpan IP: hash alamat dengan kunci acak yang berganti setiap hari, hanya di memori (pola
+- Pengunjung dikenali tanpa menyimpan IP: hash alamat dengan kunci acak, hanya di memori dan dibuang
+  sesudah 24 jam (TSK-M72; sebelumnya kunci berganti setiap hari) (pola
   TSK-M40, TSK-M43). Batas per alamat disimpan di volume faucet.
 - Anti-bot: Cloudflare Turnstile di web; di APK diperiksa di task APK Wallet. Jika tidak bisa, faucet APK hanya untuk alamat
   terdaftar atau dengan batas lebih kecil.
