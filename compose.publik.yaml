@@ -19,6 +19,13 @@
 #   zevrigo-seed.ratuaurion.store  -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare)
 #   zevrigo-rpc.ratuaurion.store   -> localhost:28804   gerbang RPC wallet peserta (gerbang-rpc, TSK-M53)
 #   zevrigo-faucet.ratuaurion.store -> node-faucet:28805 faucet demo (faucet, TSK-M54), lewat jaringan Docker
+# Tunnel kedua "zevrigo" (Q187, pencipta 22 November 2026; akun Cloudflare domain zevrigo.online), layanan
+# cloudflared-zevrigo, token di ${HOME}/.zevrigo.env (izin 600, baris TUNNEL_TOKEN=). Route sama, tipe HTTP:
+#   demo-explorer.zevrigo.online    -> localhost:28802   explorer
+#   demo-seed-p2p.zevrigo.online    -> localhost:28803   seed P2P WebSocket
+#   demo-gerbang-rpc.zevrigo.online -> localhost:28804   gerbang RPC
+#   demo-faucet.zevrigo.online      -> node-faucet:28805 faucet
+# Tunnel lama (*.ratuaurion.store) tetap jalan paralel: wallet 0.3.1 dan Explorer 0.1.0 memakai host lama (RENCANA_T13).
 # Blog resmi tidak lagi di VPS (Q186, pencipta 22 November 2026): situs utama https://zevrigo.online di Cloudflare, dibangun
 # otomatis dari GitHub badakbesi/zevrigo-blog. Layanan blog, folder ~/zevrigo/blog, dan route zevrigo-blog.ratuaurion.store dihapus.
 # Node lain bergabung dengan:
@@ -134,6 +141,21 @@ services:
     command: ["tunnel", "--no-autoupdate", "run"]
     env_file:
       - ${HOME}/.zevrigo-tunnel.env
+    network_mode: "service:node"
+    depends_on:
+      - explorer
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  cloudflared-zevrigo:
+    profiles: ["vps"]
+    # Q187 (22 November 2026, pencipta): tunnel "zevrigo" untuk host *.zevrigo.online, berdampingan dengan tunnel lama
+    # (layanan cloudflared). Image dan namespace sama dengan cloudflared: localhost = namespace node seed, dan faucet
+    # mempercayai CF-Connecting-IP dari alamat layanan node (--trust-proxy-host node). Token tidak di repo.
+    image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    command: ["tunnel", "--no-autoupdate", "run"]
+    env_file:
+      - ${HOME}/.zevrigo.env
     network_mode: "service:node"
     depends_on:
       - explorer
