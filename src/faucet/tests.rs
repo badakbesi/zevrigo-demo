@@ -32,7 +32,7 @@ const ZVRG: u128 = 1_000_000_000_000_000_000;
 /// Satu waktu tetap (detik Unix) di tengah hari UTC.
 const NOW: u64 = 1_800_000_000;
 
-const ORIGIN: &str = "https://zevrigo.ratuaurion.store";
+const ORIGIN: &str = "https://demo-explorer.zevrigo.online";
 
 fn zvrg(n: u128) -> Amount {
     Amount::from_quanta(n * ZVRG)

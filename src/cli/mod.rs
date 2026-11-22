@@ -71,7 +71,7 @@ pub const USAGE: &str = concat!(
     "                      nama host proxy tepercaya (misalnya cloudflared); untuk koneksi dari alamatnya, pengunjung\n",
     "                      dikenali dari kepala CF-Connecting-IP (di-resolve ulang tiap 60 detik)\n",
     "  --allow-origin <o>  origin peramban yang boleh memanggil faucet (CORS); boleh berulang (bawaan\n",
-    "                      https://zevrigo.ratuaurion.store)\n",
+    "                      https://demo-explorer.zevrigo.online)\n",
     "\n",
     "Setelah siap, alamat dengar dicetak ke stdout sebagai `http: http://<alamat>` (mode faucet juga\n",
     "`alamat faucet: <alamat>`). Log ditulis ke stderr tanpa alamat\n",
@@ -101,7 +101,7 @@ pub const DEFAULT_FAUCET_AMOUNT: Amount = Amount::from_quanta(100 * QUANTA_PER_Z
 pub const DEFAULT_DAILY_LIMIT: u32 = 100;
 
 /// Origin bawaan yang boleh memanggil faucet dari peramban: explorer publik.
-pub const DEFAULT_ORIGIN: &str = "https://zevrigo.ratuaurion.store";
+pub const DEFAULT_ORIGIN: &str = "https://demo-explorer.zevrigo.online";
 
 /// Port situs statis bawaan (blog, TSK-M64).
 pub const DEFAULT_WEB_PORT: u16 = 28_807;

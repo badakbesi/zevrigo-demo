@@ -1,7 +1,7 @@
 # Zevrigo Demo (MOD-18)
 
 Layanan jaringan demo regtest Zevrigo Coin (DEC-34, DEC-36): `zevrigo-demo rpc` (gerbang RPC aman untuk wallet peserta,
-`https://zevrigo-rpc.ratuaurion.store`), `faucet` (100 ZVRG demo per permintaan, sekali per alamat
+`https://demo-gerbang-rpc.zevrigo.online`), `faucet` (100 ZVRG demo per permintaan, sekali per alamat
 dan paling banyak 5 kali per pengunjung dalam 24 jam), `upacara` (alat upacara genesis
 regtest), dan `web` (penyaji situs statis untuk blog). Koin demo tidak bernilai.
 
@@ -42,11 +42,15 @@ Aturan lengkap di [docs/reference/spesifikasi-docker-v0.1.md](docs/reference/spe
 
 ### Explorer dan seed publik lewat Cloudflare Tunnel
 
-`compose.publik.yaml` membuka explorer dan seed P2P ke internet lewat Cloudflare Tunnel tanpa membuka port router. Token
-tunnel disimpan di luar repo, di `~/.zevrigo-tunnel.env` (izin `600`, satu baris `TUNNEL_TOKEN=` diikuti token dari dasbor
-Cloudflare Zero Trust). Public hostname tunnel, semuanya tipe HTTP: `zevrigo.ratuaurion.store` ke `localhost:28802`
-(explorer), `zevrigo-seed.ratuaurion.store` ke `localhost:28803` (seed P2P WebSocket), dan `zevrigo-rpc.ratuaurion.store` ke
-`localhost:28804` (gerbang RPC untuk wallet peserta: hanya metode aman, tanpa menambang).
+`compose.publik.yaml` membuka explorer, seed P2P, gerbang RPC, dan faucet ke internet lewat Cloudflare Tunnel tanpa membuka
+port router. Ada dua tunnel (DEC-42): `zevrigo` (layanan `cloudflared-zevrigo`, domain resmi `zevrigo.online`) dan tunnel
+lama (layanan `cloudflared`, `ratuaurion.store`, tetap jalan selama peralihan karena wallet 0.3.1 dan aplikasi Explorer 0.1.0
+memakainya). Token disimpan di luar repo, di VPS: `~/.zevrigo.env` dan `~/.zevrigo-tunnel.env` (izin `600`, satu baris
+`TUNNEL_TOKEN=` diikuti token dari dasbor Cloudflare). Route kedua tunnel tipe HTTP ke layanan yang sama: explorer
+`demo-explorer.zevrigo.online` (lama `zevrigo.ratuaurion.store`) ke `localhost:28802`, seed P2P WebSocket
+`demo-seed-p2p.zevrigo.online` (lama `zevrigo-seed`) ke `localhost:28803`, gerbang RPC untuk wallet peserta (hanya metode aman,
+tanpa menambang) `demo-gerbang-rpc.zevrigo.online` (lama `zevrigo-rpc`) ke `localhost:28804`, dan faucet
+`demo-faucet.zevrigo.online` (lama `zevrigo-faucet`) ke `node-faucet:28805`.
 
 Jaringan demo berjalan di dua mesin (TSK-M65, DEC-38), dipilih dengan profile compose. Tanpa `COMPOSE_PROFILES` tidak ada
 layanan publik yang dinyalakan, sehingga seed dan tunnel tidak pernah hidup di dua tempat sekaligus:
@@ -70,7 +74,7 @@ ke seed dengan:
 
 ```bash
 zevrigo-node --regtest --datadir ~/.zevrigo \
-  --connect /dns4/zevrigo-seed.ratuaurion.store/tcp/443/tls/sni/zevrigo-seed.ratuaurion.store/ws/p2p/<PeerId seed>
+  --connect /dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/<PeerId seed>
 ```
 
 Saat ini regtest (uji); testnet menyusul. Rincian di Spesifikasi Docker v0.1 Bagian 7.
