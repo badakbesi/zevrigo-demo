@@ -28,8 +28,8 @@
 # Tunnel lama (*.ratuaurion.store) tetap jalan paralel: wallet 0.3.1 dan Explorer 0.1.0 memakai host lama (RENCANA_T13).
 # Blog resmi tidak lagi di VPS (Q186, pencipta 22 November 2026): situs utama https://zevrigo.online di Cloudflare, dibangun
 # otomatis dari GitHub badakbesi/zevrigo-blog. Layanan blog, folder ~/zevrigo/blog, dan route zevrigo-blog.ratuaurion.store dihapus.
-# Node lain bergabung dengan:
-#   --connect /dns4/zevrigo-seed.ratuaurion.store/tcp/443/tls/sni/zevrigo-seed.ratuaurion.store/ws/p2p/<PeerId seed>
+# Node lain bergabung dengan (Q187: host baru; host lama zevrigo-seed.ratuaurion.store tetap menjawab selama peralihan):
+#   --connect /dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/<PeerId seed>
 # PeerId seed tercetak di log node sebagai baris p2p-ws: (kunci tetap di volume data).
 #
 # Explorer mendengar di 127.0.0.1 (bawaan) di dalam namespace jaringan node. Satu-satunya jalan masuk dari luar adalah
@@ -71,9 +71,9 @@ services:
       - --web-dir
       - /usr/share/zevrigo/web
       - --trust-proxy
-      # TSK-M54: halaman /faucet/ boleh memanggil layanan faucet (connect-src).
+      # TSK-M54: halaman /faucet/ boleh memanggil layanan faucet (connect-src). Q187: faucet host baru (web memanggilnya).
       - --faucet-origin
-      - https://zevrigo-faucet.ratuaurion.store
+      - https://demo-faucet.zevrigo.online
 
   gerbang-rpc:
     profiles: ["vps"]
@@ -154,8 +154,11 @@ services:
     # mempercayai CF-Connecting-IP dari alamat layanan node (--trust-proxy-host node). Token tidak di repo.
     image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     command: ["tunnel", "--no-autoupdate", "run"]
+    # Token hanya ada di VPS; required: false agar compose profil pc (PC tanpa berkas ini) tetap terbaca. Di VPS skrip
+    # pemasangan memeriksa ~/.zevrigo.env ada (izin 600).
     env_file:
-      - ${HOME}/.zevrigo.env
+      - path: ${HOME}/.zevrigo.env
+        required: false
     network_mode: "service:node"
     depends_on:
       - explorer
@@ -196,7 +199,7 @@ services:
     profiles: ["pc"]
     image: zevrigo:regtest
     pull_policy: never
-    command: &node-operator ["--regtest", "--datadir", "/data", "--connect", "${ZVRG_SEED:-/dns4/zevrigo-seed.ratuaurion.store/tcp/443/tls/sni/zevrigo-seed.ratuaurion.store/ws/p2p/12D3KooWABPBsu8gZWtL7bbeEPjg6gwRPDbp3GZidpTeUC95rRDo}"]
+    command: &node-operator ["--regtest", "--datadir", "/data", "--connect", "${ZVRG_SEED:-/dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/12D3KooWABPBsu8gZWtL7bbeEPjg6gwRPDbp3GZidpTeUC95rRDo}"]
     volumes:
       - zvrg-penambang:/data
     mem_limit: 256m
@@ -236,7 +239,19 @@ services:
     image: zevrigo:regtest
     pull_policy: never
     entrypoint: ["zevrigo-demo"]
-    command: ["faucet", "--datadir", "/data", "--http-bind", "0.0.0.0", "--trust-proxy-host", "node"]
+    # Q187: faucet dipanggil dari halaman explorer host baru dan host lama (halaman yang sama disajikan di keduanya).
+    command:
+      - faucet
+      - --datadir
+      - /data
+      - --http-bind
+      - 0.0.0.0
+      - --trust-proxy-host
+      - node
+      - --allow-origin
+      - https://demo-explorer.zevrigo.online
+      - --allow-origin
+      - https://zevrigo.ratuaurion.store
     network_mode: "service:node-faucet"
     volumes:
       - zvrg-faucet-dompet:/data
