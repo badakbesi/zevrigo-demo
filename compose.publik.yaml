@@ -3,7 +3,7 @@
 # COMPOSE_PROFILES tidak ada layanan publik yang dinyalakan, jadi seed dan tunnel tidak pernah hidup di dua tempat:
 #
 #   VPS: COMPOSE_PROFILES=vps docker compose -f compose.yaml -f compose.publik.yaml up -d --no-build
-#        seed (node), explorer, gerbang-rpc, blog, cloudflared, node-faucet + faucet, node-pengamat
+#        seed (node), explorer, gerbang-rpc, penambang-cadangan, cloudflared, node-faucet + faucet, node-pengamat
 #   PC:  COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d
 #        node-penambang + miner-berkala, node-treasury (kunci kantong treasury tidak di VPS)
 #   berhenti: COMPOSE_PROFILES=<vps|pc> docker compose -f compose.yaml -f compose.publik.yaml stop
@@ -19,7 +19,8 @@
 #   zevrigo-seed.ratuaurion.store  -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare)
 #   zevrigo-rpc.ratuaurion.store   -> localhost:28804   gerbang RPC wallet peserta (gerbang-rpc, TSK-M53)
 #   zevrigo-faucet.ratuaurion.store -> node-faucet:28805 faucet demo (faucet, TSK-M54), lewat jaringan Docker
-#   zevrigo-blog.ratuaurion.store  -> localhost:28807   blog resmi (blog, TSK-M64)
+# Blog resmi tidak lagi di VPS (Q186, pencipta 22 November 2026): situs utama https://zevrigo.online di Cloudflare, dibangun
+# otomatis dari GitHub badakbesi/zevrigo-blog. Layanan blog, folder ~/zevrigo/blog, dan route zevrigo-blog.ratuaurion.store dihapus.
 # Node lain bergabung dengan:
 #   --connect /dns4/zevrigo-seed.ratuaurion.store/tcp/443/tls/sni/zevrigo-seed.ratuaurion.store/ws/p2p/<PeerId seed>
 # PeerId seed tercetak di log node sebagai baris p2p-ws: (kunci tetap di volume data).
@@ -123,27 +124,6 @@ services:
       - node
     mem_limit: 128m
     cpus: 0.5
-    stop_grace_period: 10s
-    restart: unless-stopped
-
-  blog:
-    profiles: ["vps"]
-    # TSK-M64 (DEC-37): blog statis repo zevrigo-blog lewat zevrigo-demo mode web, di namespace node seed, mendengar
-    # 127.0.0.1:28807, hanya dicapai lewat cloudflared. Tanpa kuki dan tanpa log pengunjung.
-    # Q179 (21 November 2026): hasil `next build` (out/) dari folder ./blog di samping compose ini (VPS: ~/zevrigo/blog), baca
-    # saja, menimpa salinan di image. Artikel dan halaman unduh baru cukup menyalin folder itu lalu membuat ulang container blog,
-    # tanpa image Docker baru. Folder wajib ada sebelum `up` (tanpa folder, Docker membuat folder kosong dan blog kosong).
-    image: zevrigo:regtest
-    pull_policy: never
-    entrypoint: ["zevrigo-demo"]
-    command: ["web", "--web-dir", "/usr/share/zevrigo/blog"]
-    volumes:
-      - ./blog:/usr/share/zevrigo/blog:ro
-    network_mode: "service:node"
-    depends_on:
-      - node
-    mem_limit: 128m
-    cpus: 0.25
     stop_grace_period: 10s
     restart: unless-stopped
 
