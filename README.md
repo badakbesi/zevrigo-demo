@@ -70,12 +70,15 @@ peserta. Layanan `miner-berkala` di node penambang menambang satu blok regtest s
 sehingga explorer publik terus menampilkan blok baru. Jeda bisa diganti dengan `ZVRG_JEDA=<detik>` saat `up`, dan layanan ini
 bisa dihentikan sendiri dengan `COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml stop miner-berkala`. Rancangan jaringan
 demo: [docs/reference/rancangan-ekosistem-demo-v0.1.md](docs/reference/rancangan-ekosistem-demo-v0.1.md). Node lain bergabung
-ke seed dengan:
+ke seed dengan seed resmi bawaan node (DEC-43), tanpa menyalin alamat:
 
 ```bash
-zevrigo-node --regtest --datadir ~/.zevrigo \
-  --connect /dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/<PeerId seed>
+zevrigo-node --regtest --datadir ~/.zevrigo --seed-resmi
 ```
+
+atau dengan alamat lengkap `--connect /dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/<PeerId seed>`.
+Seed mengumumkan alamat itu ke rekan lewat pertukaran alamat, dan node menyimpan rekan yang ditemukan di
+`<folder>/regtest/peers.json`.
 
 Saat ini regtest (uji); testnet menyusul. Rincian di Spesifikasi Docker v0.1 Bagian 7.
 

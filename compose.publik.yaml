@@ -28,9 +28,11 @@
 # Tunnel lama (*.ratuaurion.store) tetap jalan paralel: wallet 0.3.1 dan Explorer 0.1.0 memakai host lama (RENCANA_T13).
 # Blog resmi tidak lagi di VPS (Q186, pencipta 22 November 2026): situs utama https://zevrigo.online di Cloudflare, dibangun
 # otomatis dari GitHub badakbesi/zevrigo-blog. Layanan blog, folder ~/zevrigo/blog, dan route zevrigo-blog.ratuaurion.store dihapus.
-# Node lain bergabung dengan (Q187: host baru; host lama zevrigo-seed.ratuaurion.store tetap menjawab selama peralihan):
+# Node lain bergabung dengan --seed-resmi (Q191, DEC-43: seed bawaan node sejak repo inti b710885, alamat dan PeerId di
+# dalam node), atau dengan alamat lengkap:
 #   --connect /dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/<PeerId seed>
-# PeerId seed tercetak di log node sebagai baris p2p-ws: (kunci tetap di volume data).
+# PeerId seed tercetak di log node sebagai baris p2p-ws: (kunci tetap di volume data). Seed mengumumkan alamat itu ke rekan
+# lewat pertukaran alamat (--p2p-publik, TSK-M75); setiap node menyimpan buku alamat di /data/regtest/peers.json (TSK-M74).
 #
 # Explorer mendengar di 127.0.0.1 (bawaan) di dalam namespace jaringan node. Satu-satunya jalan masuk dari luar adalah
 # cloudflared yang berbagi namespace itu, sehingga --trust-proxy aman (TSK-M43). Port host dari compose.yaml dicabut;
@@ -39,7 +41,7 @@
 # pencipta 11 November 2026); testnet menyusul bersama genesis testnet (TSK-F06).
 #
 # Jaringan demo regtest (DEC-34, TSK-M47): 4 node operator lain, masing-masing di container dan volume sendiri, tersambung
-# ke seed lewat alamat publik di atas (lewat internet dan Cloudflare, seperti peserta). Mereka memakai 4 dari 32 slot masuk
+# ke seed resmi bawaan (--seed-resmi, Q191) lewat alamat publik di atas (lewat internet dan Cloudflare, seperti peserta). Mereka memakai 4 dari 32 slot masuk
 # seed. Tanpa port host; batas 256 MiB dan 0,5 CPU per node (terukur Q125: node sekitar 10 MiB, node baru sinkron 8 detik).
 #   node-penambang  tempat miner-berkala      node-treasury  wallet treasury (operator)
 #   node-faucet     layanan faucet (TSK-M54)   node-pengamat  hanya menerima siaran
@@ -48,7 +50,8 @@
 # (zvrg-faucet-dompet: faucet-frasa.txt dan faucet-batas.json). Diisi ulang bertahap dari kantong Faucet treasury:
 #   COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml exec node-treasury zevrigo-cli --datadir /data send \
 #     --dari <alamat kantong Faucet> --to <alamat faucet dari log: alamat faucet:> --amount 10000
-# Alamat seed bisa diganti dengan variabel ZVRG_SEED (misalnya volume seed baru dengan PeerId lain).
+# Seed dengan PeerId lain (misalnya volume seed baru) = node versi baru dengan daftar seed resmi baru (DEC-43); variabel
+# ZVRG_SEED tidak dipakai lagi sejak Q191.
 #
 # miner-berkala (TSK-M46, TSK-M47): satu blok regtest setiap ZVRG_JEDA detik (bawaan 120 = waktu blok target), di namespace
 # node-penambang. Hadiah ke payload di /data/payout-penambang (volume node-penambang, dipasang baca saja); selama file itu
@@ -59,7 +62,8 @@ name: zevrigo-publik
 services:
   node:
     profiles: ["vps"]
-    command: ["--regtest", "--datadir", "/data", "--p2p-ws-port", "28803"]
+    # Q191 (DEC-43, TSK-M75): seed mengumumkan alamat wss resminya ke rekan lewat pertukaran alamat (protokol addr).
+    command: ["--regtest", "--datadir", "/data", "--p2p-ws-port", "28803", "--p2p-publik", "/dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws"]
     ports: !reset []
 
   explorer:
@@ -199,7 +203,8 @@ services:
     profiles: ["pc"]
     image: zevrigo:regtest
     pull_policy: never
-    command: &node-operator ["--regtest", "--datadir", "/data", "--connect", "${ZVRG_SEED:-/dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/12D3KooWABPBsu8gZWtL7bbeEPjg6gwRPDbp3GZidpTeUC95rRDo}"]
+    # Q191 (DEC-43, TSK-M73): seed resmi bawaan node (demo-seed-p2p.zevrigo.online, PeerId di dalam node), bukan alamat panjang.
+    command: &node-operator ["--regtest", "--datadir", "/data", "--seed-resmi"]
     volumes:
       - zvrg-penambang:/data
     mem_limit: 256m
