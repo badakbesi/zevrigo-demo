@@ -1,0 +1,283 @@
+# Rilis paket peserta jaringan demo (RENCANA_T14 bagian 5b; pencipta 23 November 2026: tag `peserta-demo-zevrigo`, skrip awal
+# `peserta-demo-zevrigo.sh` / `.cmd`, miner dengan jeda bawaan 120 detik, README + skrip awal).
+# Jalan saat pencipta mem-push tag `peserta-demo-zevrigo` (build, uji, rilis draf), saat main berubah di workflow ini atau di
+# folder paket/ (build dan uji saja, sebagai uji sebelum tag), atau manual (workflow_dispatch: hanya artefak).
+# Isi paket: zevrigo-node, zevrigo-miner, zevrigo-cli (repo inti) dan zevrigo-demo (repo ini), README.md dan skrip awal dari
+# folder paket/, LICENSE-MIT, LICENSE-APACHE. Linux x86_64 .tar.gz (ubuntu-22.04, glibc 2.35) dan Windows x64 .zip
+# (windows-latest, MSVC). Setiap sistem diuji: program menjawab --version, lalu node baru dengan --seed-resmi tersambung ke
+# seed jaringan demo dan mendapat blok. Lalu rilis DRAF berisi kedua arsip dan SHA256SUMS.txt; pencipta memeriksa draf lalu
+# menerbitkannya. Belum ditandatangani (DEC-40).
+#
+# Repo inti di-checkout di sebelah repo ini (crate inti lewat path `../zevrigo`, AGENDA P3) pada ZEVRIGO_CORE_REF yang dikunci
+# (be71d57: seed resmi bawaan, penemuan rekan, sambungan masuk; DEC-43), agar rilis selalu dibangun dari kode yang sama.
+
+name: Rilis paket peserta
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["peserta-demo-zevrigo"]
+    # Hanya untuk main; GitHub tidak memeriksa paths saat tag di-push.
+    paths: [".github/workflows/rilis-peserta.yml", "paket/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rilis-peserta-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZEVRIGO_CORE_REF: be71d5750b4a67d02f1d66e965637eade6780191
+  PAKET: peserta-demo-zevrigo
+  CARGO_TERM_COLOR: never
+
+jobs:
+  linux:
+    name: Linux x86_64 (.tar.gz)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zevrigo-demo
+          persist-credentials: false
+
+      - name: Checkout repo inti (crate dan program zevrigo-*)
+        uses: actions/checkout@v4
+        with:
+          repository: badakbesi/zevrigo
+          ref: ${{ env.ZEVRIGO_CORE_REF }}
+          path: zevrigo
+          persist-credentials: false
+
+      - name: Tag sah
+        if: github.ref_type == 'tag'
+        run: |
+          [ "$GITHUB_REF_NAME" = "$PAKET" ] || { echo "tag $GITHUB_REF_NAME bukan $PAKET"; exit 1; }
+
+      - name: Toolchain Rust (rust-toolchain.toml kedua repo)
+        run: |
+          (cd zevrigo && rustup toolchain install && rustc --version)
+          (cd zevrigo-demo && rustup toolchain install && rustc --version)
+
+      - name: Pustaka sistem (RandomX dibangun cmake + g++)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake make g++ pkg-config
+
+      - name: Build node, miner, CLI (repo inti, Cargo.lock tetap)
+        working-directory: zevrigo
+        run: cargo build --release --locked -p zevrigo-node -p zevrigo-miner -p zevrigo-cli
+
+      - name: Build zevrigo-demo (Cargo.lock tetap)
+        working-directory: zevrigo-demo
+        run: cargo build --release --locked --bin zevrigo-demo
+
+      - name: Susun paket
+        run: |
+          set -euo pipefail
+          D="out/$PAKET"; mkdir -p "$D"
+          for b in zevrigo-node zevrigo-miner zevrigo-cli; do install -m 755 "zevrigo/target/release/$b" "$D/"; done
+          install -m 755 zevrigo-demo/target/release/zevrigo-demo "$D/"
+          install -m 755 "zevrigo-demo/paket/$PAKET.sh" "$D/"
+          install -m 644 zevrigo-demo/paket/README.md zevrigo-demo/LICENSE-MIT zevrigo-demo/LICENSE-APACHE "$D/"
+          strip "$D"/zevrigo-*
+          bash -n "$D/$PAKET.sh"
+          ls -l "$D"
+
+      - name: Uji program dan glibc
+        working-directory: out/peserta-demo-zevrigo
+        run: |
+          set -euo pipefail
+          for b in zevrigo-node zevrigo-miner zevrigo-cli zevrigo-demo; do ./$b --version; done
+          ./zevrigo-node --help | grep -q -- '--seed-resmi'
+          ./zevrigo-miner --help | grep -q -- '--blocks'
+          G=$(for b in zevrigo-*; do objdump -T "$b" | grep -o 'GLIBC_[0-9.]*'; done | sort -uV | tail -n 1)
+          echo "glibc tertinggi yang dibutuhkan: $G"
+          [ "$(printf '%s\n' "$G" GLIBC_2.35 | sort -V | tail -n 1)" = GLIBC_2.35 ] || { echo "butuh glibc lebih baru dari 2.35"; exit 1; }
+          ldd zevrigo-miner
+
+      - name: Uji jaringan (node baru --seed-resmi tersambung ke seed demo)
+        working-directory: out/peserta-demo-zevrigo
+        run: |
+          set -u
+          T=$(mktemp -d)
+          ./zevrigo-node --regtest --datadir "$T" --seed-resmi > "$T/out.txt" 2> "$T/log.txt" &
+          PN=$!
+          ok=0; H=""
+          for i in $(seq 1 60); do
+            H=$(./zevrigo-cli info 2>/dev/null | sed -n 's/^tinggi: //p')
+            if grep -q 'rekan terhubung' "$T/log.txt" && [ -n "$H" ] && [ "$H" -gt 0 ]; then ok=1; break; fi
+            sleep 5
+          done
+          kill -TERM "$PN"; wait "$PN" || true
+          grep -E 'seed resmi|rekan terhubung|WARN|ERROR' "$T/log.txt" | head -n 8 | cut -c1-200
+          echo "tinggi node uji: ${H:-?}"
+          [ "$ok" = 1 ] || { tail -n 20 "$T/log.txt"; echo "node tidak tersambung ke seed demo atau tidak mendapat blok dalam 5 menit"; exit 1; }
+
+      - name: Arsip
+        run: |
+          set -euo pipefail
+          N="$PAKET-linux-x86_64.tar.gz"
+          tar -C out --sort=name --owner=0 --group=0 --numeric-owner -czf "$N" "$PAKET"
+          mkdir -p rilis && mv "$N" rilis/
+          (cd rilis && sha256sum "$N")
+
+      - name: Artefak
+        uses: actions/upload-artifact@v4
+        with:
+          name: paket-linux
+          path: rilis/
+          retention-days: 30
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64 (.zip)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zevrigo-demo
+          persist-credentials: false
+
+      - name: Checkout repo inti (crate dan program zevrigo-*)
+        uses: actions/checkout@v4
+        with:
+          repository: badakbesi/zevrigo
+          ref: ${{ env.ZEVRIGO_CORE_REF }}
+          path: zevrigo
+          persist-credentials: false
+
+      - name: Tag sah
+        if: github.ref_type == 'tag'
+        run: |
+          if ($env:GITHUB_REF_NAME -ne $env:PAKET) { Write-Error "tag $env:GITHUB_REF_NAME bukan $env:PAKET"; exit 1 }
+
+      - name: Toolchain Rust (rust-toolchain.toml kedua repo)
+        run: |
+          Push-Location zevrigo; rustup toolchain install; rustc --version; Pop-Location
+          Push-Location zevrigo-demo; rustup toolchain install; rustc --version; Pop-Location
+          cmake --version
+
+      - name: Build node, miner, CLI (repo inti, Cargo.lock tetap; RandomX lewat cmake + MSVC)
+        working-directory: zevrigo
+        run: cargo build --release --locked -p zevrigo-node -p zevrigo-miner -p zevrigo-cli
+
+      - name: Build zevrigo-demo (Cargo.lock tetap)
+        working-directory: zevrigo-demo
+        run: cargo build --release --locked --bin zevrigo-demo
+
+      - name: Susun paket
+        run: |
+          $D = Join-Path out $env:PAKET
+          New-Item -ItemType Directory -Force -Path $D | Out-Null
+          foreach ($b in 'zevrigo-node', 'zevrigo-miner', 'zevrigo-cli') { Copy-Item "zevrigo/target/release/$b.exe" $D }
+          Copy-Item zevrigo-demo/target/release/zevrigo-demo.exe $D
+          # Skrip .cmd wajib baris CRLF dan ASCII (label dan goto cmd.exe).
+          $cmd = Get-Content -Raw "zevrigo-demo/paket/$env:PAKET.cmd"
+          if ($cmd -match '[^\x00-\x7F]') { Write-Error 'skrip .cmd bukan ASCII'; exit 1 }
+          $cmd = ($cmd -replace "`r`n", "`n") -replace "`n", "`r`n"
+          [System.IO.File]::WriteAllText((Join-Path $D "$env:PAKET.cmd"), $cmd, [System.Text.Encoding]::ASCII)
+          foreach ($f in 'paket/README.md', 'LICENSE-MIT', 'LICENSE-APACHE') { Copy-Item "zevrigo-demo/$f" $D }
+          Get-ChildItem $D | Format-Table Name, Length
+
+      - name: Uji program
+        working-directory: out/peserta-demo-zevrigo
+        run: |
+          foreach ($b in 'zevrigo-node', 'zevrigo-miner', 'zevrigo-cli', 'zevrigo-demo') {
+            & ".\$b.exe" --version
+            if ($LASTEXITCODE -ne 0) { Write-Error "$b --version gagal ($LASTEXITCODE)"; exit 1 }
+          }
+          if (-not ((& .\zevrigo-node.exe --help) -match '--seed-resmi')) { Write-Error 'node tanpa --seed-resmi'; exit 1 }
+
+      - name: Uji jaringan (node baru --seed-resmi tersambung ke seed demo)
+        working-directory: out/peserta-demo-zevrigo
+        run: |
+          $T = Join-Path $env:RUNNER_TEMP 'uji-node'
+          New-Item -ItemType Directory -Force -Path $T | Out-Null
+          $p = Start-Process -FilePath .\zevrigo-node.exe -ArgumentList '--regtest', '--datadir', $T, '--seed-resmi' `
+            -RedirectStandardOutput (Join-Path $T 'out.txt') -RedirectStandardError (Join-Path $T 'log.txt') -PassThru -NoNewWindow
+          $ok = $false; $h = $null
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Seconds 5
+            $info = & .\zevrigo-cli.exe info 2>$null
+            $m = $info | Select-String '^tinggi: (\d+)'
+            if ($m) { $h = $m.Matches[0].Groups[1].Value }
+            $log = Get-Content -Raw (Join-Path $T 'log.txt') -ErrorAction SilentlyContinue
+            if ($log -match 'rekan terhubung' -and $h -and [int]$h -gt 0) { $ok = $true; break }
+          }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Get-Content (Join-Path $T 'log.txt') -ErrorAction SilentlyContinue | Select-String 'seed resmi|rekan terhubung|WARN|ERROR' | Select-Object -First 8
+          Write-Output "tinggi node uji: $h"
+          if (-not $ok) { Get-Content (Join-Path $T 'log.txt') -Tail 20; Write-Error 'node tidak tersambung ke seed demo atau tidak mendapat blok dalam 5 menit'; exit 1 }
+
+      - name: Arsip
+        run: |
+          $N = "$env:PAKET-windows-x64.zip"
+          New-Item -ItemType Directory -Force -Path rilis | Out-Null
+          Compress-Archive -Path (Join-Path out $env:PAKET) -DestinationPath (Join-Path rilis $N)
+          (Get-FileHash -Algorithm SHA256 (Join-Path rilis $N)).Hash.ToLower() + "  $N"
+
+      - name: Artefak
+        uses: actions/upload-artifact@v4
+        with:
+          name: paket-windows
+          path: rilis/
+          retention-days: 30
+          if-no-files-found: error
+
+  rilis:
+    name: Rilis draf
+    needs: [linux, windows]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (catatan rilis)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Ambil kedua arsip
+        uses: actions/download-artifact@v4
+        with:
+          path: rilis
+          merge-multiple: true
+
+      - name: SHA256SUMS.txt dan catatan
+        id: berkas
+        run: |
+          set -euo pipefail
+          cd rilis
+          L="$PAKET-linux-x86_64.tar.gz"; W="$PAKET-windows-x64.zip"
+          [ -f "$L" ] && [ -f "$W" ] || { ls -l; echo "arsip tidak lengkap"; exit 1; }
+          sha256sum "$L" "$W" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          SL=$(sha256sum "$L" | cut -d' ' -f1); SW=$(sha256sum "$W" | cut -d' ' -f1)
+          sed -e "s|{{TAG}}|$GITHUB_REF_NAME|g" -e "s|{{COMMIT}}|${GITHUB_SHA:0:7}|g" -e "s|{{INTI}}|${ZEVRIGO_CORE_REF:0:7}|g" \
+              -e "s|{{BERKAS_LINUX}}|$L|g" -e "s|{{BERKAS_WINDOWS}}|$W|g" -e "s|{{SHA_LINUX}}|$SL|g" -e "s|{{SHA_WINDOWS}}|$SW|g" \
+              ../paket/rilis-catatan.md > catatan.md
+          ! grep -q '{{' catatan.md || { echo "catatan rilis masih berisi {{...}}"; exit 1; }
+          echo "linux=$L" >> "$GITHUB_OUTPUT"; echo "windows=$W" >> "$GITHUB_OUTPUT"
+
+      - name: Rilis draf (belum terbit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "rilis $GITHUB_REF_NAME sudah ada; tidak ditimpa"; exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --draft --prerelease --verify-tag \
+            --title "Paket peserta jaringan demo Zevrigo (regtest)" --notes-file rilis/catatan.md \
+            "rilis/${{ steps.berkas.outputs.linux }}" "rilis/${{ steps.berkas.outputs.windows }}" rilis/SHA256SUMS.txt

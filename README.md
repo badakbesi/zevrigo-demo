@@ -82,4 +82,13 @@ Seed mengumumkan alamat itu ke rekan lewat pertukaran alamat, dan node menyimpan
 
 Saat ini regtest (uji); testnet menyusul. Rincian di Spesifikasi Docker v0.1 Bagian 7.
 
+## Paket peserta (rilis `peserta-demo-zevrigo`)
+
+Untuk peserta tanpa Docker (RENCANA_T14 bagian 5b): arsip Linux x86_64 (`.tar.gz`) dan Windows x64 (`.zip`) berisi
+`zevrigo-node`, `zevrigo-miner`, `zevrigo-cli`, `zevrigo-demo`, README, dan skrip awal `peserta-demo-zevrigo.sh` /
+`peserta-demo-zevrigo.cmd`. Skrip menyalakan node dengan `--seed-resmi`, membuat wallet bila belum ada, lalu menambang satu blok
+setiap 120 detik (`ZVRG_JEDA`). Dibangun workflow [rilis-peserta.yml](.github/workflows/rilis-peserta.yml) saat tag
+`peserta-demo-zevrigo` di-push (repo inti dikunci `ZEVRIGO_CORE_REF`), sebagai rilis draf yang diterbitkan pencipta. Isi README
+paket dan skrip ada di folder [paket/](paket/).
+
 Lisensi: MIT OR Apache-2.0 (DEC-02).
