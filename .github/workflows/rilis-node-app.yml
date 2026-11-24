@@ -1,6 +1,7 @@
 # Aplikasi Zevrigo Node (DEC-44, RENCANA_T16): build dan uji di Linux (AppImage) dan Windows (installer NSIS).
-# Jalan saat main berubah di app/ atau di workflow ini, atau manual (workflow_dispatch). Hasilnya artefak untuk dicoba pencipta
-# (Q194b); rilis (tag, draf, terbit) ditambahkan sesudah nama tag diputuskan pencipta (Q194c).
+# Jalan saat main berubah di app/ atau di workflow ini (build dan uji saja, artefak untuk dicoba), manual (workflow_dispatch:
+# artefak), atau saat pencipta mem-push tag `zevrigo-demo-gui` (pencipta 24 November 2026, Q194c): build, uji, lalu rilis DRAF
+# berisi installer, AppImage, dan SHA256SUMS.txt. Pencipta menguji draf lalu menerbitkannya. Belum ditandatangani (DEC-40).
 # Sidecar zevrigo-node dan zevrigo-miner dibangun dari repo inti pada ZEVRIGO_CORE_REF (sama dengan paket peserta
 # peserta-demo-zevrigo), lalu ditaruh di app/src-tauri/binaries/<nama>-<target triple> untuk Tauri `externalBin`.
 
@@ -9,6 +10,8 @@ name: Aplikasi Zevrigo Node
 on:
   push:
     branches: ["main"]
+    tags: ["zevrigo-demo-gui"]
+    # Hanya untuk main; GitHub tidak memeriksa paths saat tag di-push.
     paths: ["app/**", ".github/workflows/rilis-node-app.yml"]
   workflow_dispatch:
 
@@ -188,3 +191,54 @@ jobs:
           path: zevrigo-demo/rilis/
           retention-days: 30
           if-no-files-found: error
+
+  rilis:
+    name: Rilis draf
+    needs: [linux, windows]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (catatan rilis)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Ambil installer dan AppImage
+        uses: actions/download-artifact@v4
+        with:
+          path: rilis
+          merge-multiple: true
+
+      - name: SHA256SUMS.txt dan catatan
+        id: berkas
+        run: |
+          set -euo pipefail
+          V=$(python3 -c 'import json; print(json.load(open("app/src-tauri/tauri.conf.json"))["version"])')
+          cd rilis
+          W="zevrigo-node-$V-x64-setup.exe"; L="zevrigo-node-$V-x86_64.AppImage"
+          [ -f "$W" ] && [ -f "$L" ] || { ls -l; echo "berkas tidak lengkap"; exit 1; }
+          sha256sum "$W" "$L" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          # SHA dari build masing-masing sistem harus sama dengan berkas yang diunggah.
+          grep -qF "$(cut -d' ' -f1 SHA256SUMS-windows.txt)  $W" SHA256SUMS.txt || { echo "SHA installer berubah"; exit 1; }
+          grep -qF "$(cut -d' ' -f1 SHA256SUMS-linux.txt)" SHA256SUMS.txt || { echo "SHA AppImage berubah"; exit 1; }
+          SW=$(sha256sum "$W" | cut -d' ' -f1); SL=$(sha256sum "$L" | cut -d' ' -f1)
+          sed -e "s|{{TAG}}|$GITHUB_REF_NAME|g" -e "s|{{VERSI}}|$V|g" -e "s|{{COMMIT}}|${GITHUB_SHA:0:7}|g" \
+              -e "s|{{INTI}}|${ZEVRIGO_CORE_REF:0:7}|g" -e "s|{{BERKAS_WINDOWS}}|$W|g" -e "s|{{BERKAS_LINUX}}|$L|g" \
+              -e "s|{{SHA_WINDOWS}}|$SW|g" -e "s|{{SHA_LINUX}}|$SL|g" ../app/rilis-catatan.md > catatan.md
+          ! grep -q '{{' catatan.md || { echo "catatan rilis masih berisi {{...}}"; exit 1; }
+          echo "windows=$W" >> "$GITHUB_OUTPUT"; echo "linux=$L" >> "$GITHUB_OUTPUT"; echo "versi=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Rilis draf (belum terbit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "rilis $GITHUB_REF_NAME sudah ada; tidak ditimpa"; exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --draft --prerelease --verify-tag \
+            --title "Zevrigo Node ${{ steps.berkas.outputs.versi }} (jaringan demo regtest)" --notes-file rilis/catatan.md \
+            "rilis/${{ steps.berkas.outputs.windows }}" "rilis/${{ steps.berkas.outputs.linux }}" rilis/SHA256SUMS.txt
