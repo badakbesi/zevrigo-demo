@@ -1,0 +1,51 @@
+ZEVRIGO NODE 0.1 (APLIKASI) - KEBIJAKAN PRIVASI DAN LISENSI
+(English below)
+
+1. Jaringan demo
+Aplikasi ini menjalankan node dan penambang jaringan demo regtest Zevrigo di komputer Anda, untuk belajar
+dan menguji. Koin di jaringan demo tidak bernilai, tidak bisa dijual, dan bisa hilang kapan saja saat
+jaringan di-reset atau chain ditulis ulang. Ini bukan penawaran investasi.
+
+2. Data dan jaringan
+- Aplikasi tidak membuat dan tidak menyimpan wallet atau kunci rahasia. Hadiah tambang dikirim ke alamat
+  Zevrigo Wallet yang Anda tempel; alamat itu disimpan di folder data (pengaturan-zevrigo-node.json).
+- Node menyimpan chain, kunci identitas rekan P2P, dan alamat rekan di folder data (~/.zevrigo di Linux,
+  %USERPROFILE%\.zevrigo di Windows). Node tersambung ke seed resmi demo-seed-p2p.zevrigo.online lewat
+  Cloudflare dan ke rekan lain; seed dan rekan melihat alamat IP Anda saat tersambung.
+- RPC node hanya di 127.0.0.1 (tidak bisa dibuka dari komputer lain). Node tidak menerima sambungan masuk.
+- Untuk menampilkan tinggi jaringan, aplikasi bertanya ke gerbang RPC publik
+  https://demo-gerbang-rpc.zevrigo.online (tanpa alamat atau data Anda).
+- Tanpa analitik, telemetri, atau kuki. Tautan hanya dibuka di browser sistem untuk situs resmi
+  (zevrigo.online, demo-explorer.zevrigo.online, Issues GitHub zevrigo-demo).
+Cloudflare memproses lalu lintas menurut kebijakan privasinya sendiri: https://www.cloudflare.com/privacypolicy/
+
+3. Lisensi
+Dilisensikan dengan MIT atau Apache-2.0, sesuai pilihan Anda.
+Kode sumber: https://github.com/badakbesi/zevrigo-demo dan https://github.com/badakbesi/zevrigo
+Perangkat lunak ini disediakan "apa adanya", tanpa jaminan apa pun.
+
+------------------------------------------------------------------------------------
+
+ZEVRIGO NODE 0.1 (APP) - PRIVACY POLICY AND LICENSE
+
+1. Demo network
+This app runs a node and a miner of the Zevrigo regtest demo network on your computer, for learning and
+testing. Coins on the demo network have no value, cannot be sold, and can disappear at any time when the
+network is reset or the chain is rewritten. This is not an investment offer.
+
+2. Data and network
+- The app creates and stores no wallet and no secret keys. Mining rewards go to the Zevrigo Wallet address
+  you paste; that address is stored in the data folder (pengaturan-zevrigo-node.json).
+- The node stores the chain, its P2P identity key, and peer addresses in the data folder (~/.zevrigo on
+  Linux, %USERPROFILE%\.zevrigo on Windows). It connects to the official seed demo-seed-p2p.zevrigo.online
+  through Cloudflare and to other peers; the seed and peers see your IP address while connected.
+- The node RPC listens on 127.0.0.1 only. The node accepts no incoming connections.
+- To show the network height, the app asks the public RPC gateway https://demo-gerbang-rpc.zevrigo.online
+  (without your address or data).
+- No analytics, telemetry, or cookies. Links open in the system browser for official sites only.
+Cloudflare processes traffic under its own privacy policy: https://www.cloudflare.com/privacypolicy/
+
+3. License
+Licensed under MIT or Apache-2.0, at your option.
+Source code: https://github.com/badakbesi/zevrigo-demo and https://github.com/badakbesi/zevrigo
+This software is provided "as is", without warranty of any kind.

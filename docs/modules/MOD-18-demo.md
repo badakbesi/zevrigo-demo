@@ -14,6 +14,10 @@ yang dijalankan sebagai tiga proses di belakang Cloudflare Tunnel, masing-masing
 
 ## Tanggung Jawab
 
+- Aplikasi desktop **Zevrigo Node** (DEC-44, RENCANA_T16) di `app/`: antarmuka React + backend Tauri 2 (`app/src-tauri`, workspace
+  Cargo sendiri, bukan bagian program `zevrigo-demo`). Menjalankan `zevrigo-node --seed-resmi` dan `zevrigo-miner --blocks 1`
+  dengan jeda 60/120/300 detik sebagai sidecar, hadiah ke alamat Zevrigo Wallet yang ditempel; tanpa kunci rahasia.
+
 - `zevrigo-demo rpc [--node-url <url>] [--http-bind <ip>] [--http-port <port>] [--rate <n>] [--trust-proxy]` (TSK-M53):
   gerbang RPC untuk wallet peserta di `127.0.0.1:28804` (bawaan). Satu permintaan JSON-RPC 2.0 per `POST`; hanya
   `get_chain_info`, `get_block_hash`, `get_block`, `get_mempool`, `scan_utxos`, `scan_mempool`, dan `send_raw_transaction`

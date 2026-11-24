@@ -92,3 +92,9 @@ setiap 120 detik (`ZVRG_JEDA`). Dibangun workflow [rilis-peserta.yml](.github/wo
 paket dan skrip ada di folder [paket/](paket/).
 
 Lisensi: MIT OR Apache-2.0 (DEC-02).
+
+## Aplikasi Zevrigo Node (`app/`)
+
+Aplikasi desktop Windows dan Linux (DEC-44): node dan penambang jaringan demo dengan antarmuka, tanpa terminal. Sidecar
+`zevrigo-node` dan `zevrigo-miner` sama dengan paket peserta; hadiah ke alamat Zevrigo Wallet yang ditempel. Rincian di
+[app/README.md](app/README.md); dibangun dan diuji workflow [rilis-node-app.yml](.github/workflows/rilis-node-app.yml).

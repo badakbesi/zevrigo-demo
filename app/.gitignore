@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+src-tauri/target/
+src-tauri/gen/
+# Sidecar zevrigo-node dan zevrigo-miner (dibangun dari repo inti; workflow dan skrip menaruhnya di sini).
+src-tauri/binaries/
+*.log

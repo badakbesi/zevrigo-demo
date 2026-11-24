@@ -1,0 +1,72 @@
+# Aplikasi Zevrigo Node untuk Windows dan Linux (RENCANA_T16, DEC-44; pencipta 24 November 2026). Workspace Cargo sendiri dengan
+# Cargo.lock sendiri, terpisah dari program zevrigo-demo di akar repo: Cargo.lock akar, paket Docker, dan CI demo tidak berubah.
+# Aturan lint dan toolchain (rust-toolchain.toml akar) sama dengan repo ini. Cargo.lock aplikasi ini adalah bagian dari Cargo.lock
+# wallet MOD-15 (diperiksa skrip gerbang Q194).
+[package]
+name = "zevrigo-node-app"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.0"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Zevrigo Node: aplikasi node dan penambang jaringan demo regtest (Tauri 2, sidecar zevrigo-node dan zevrigo-miner)"
+
+# Nama berbeda dari program agar berkas hasil build tidak bentrok di Windows (pola MOD-15). Program tidak bernama zevrigo-node
+# karena nama itu dipakai sidecar node di folder yang sama.
+[lib]
+name = "zevrigo_node_app_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "zevrigo-node-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+tauri.workspace = true
+tauri-plugin-opener.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Tinggi chain node lokal dan gerbang RPC publik (MOD-12 di atas MOD-08, termasuk HTTPS dan coba ulang saat 429).
+zevrigo-cli.workspace = true
+# Alamat hadiah bech32m menjadi payload miner (MOD-09); tanpa kunci rahasia.
+zevrigo-wallet-core.workspace = true
+zevrigo-primitives.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+dbg_macro = "deny"
+float_arithmetic = "deny"
+float_cmp = "deny"
+float_cmp_const = "deny"
+lossy_float_literal = "deny"
+cast_precision_loss = "deny"
+imprecise_flops = "deny"
+suboptimal_flops = "deny"
+
+# Akar workspace sendiri (tidak ikut workspace program zevrigo-demo di akar repo).
+[workspace]
+resolver = "3"
+
+# Versi ditulis di workspace dan paket memakai `.workspace = true` (pola wallet MOD-15 dan aplikasi Explorer): Tauri CLI menulis
+# ulang dependensi tauri di [dependencies], tetapi tidak menyentuh dependensi workspace.
+[workspace.dependencies]
+# DEC-44 (pencipta 24 November 2026): versi dan fitur sama persis dengan wallet MOD-15 (DEC-10 bagian 11 dan 14, RENCANA_T9 F5).
+tauri = { version = "=2.12.3" }
+tauri-build = { version = "=2.7.2" }
+tauri-plugin-opener = { version = "=2.7.3" }
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+# Crate inti dari repo `zevrigo` di folder sebelah zevrigo-demo (AGENDA P3), lewat path.
+zevrigo-cli = { path = "../../../zevrigo/apps/cli" }
+zevrigo-wallet-core = { path = "../../../zevrigo/crates/wallet-core" }
+zevrigo-primitives = { path = "../../../zevrigo/crates/primitives" }

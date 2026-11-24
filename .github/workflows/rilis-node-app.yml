@@ -1,0 +1,190 @@
+# Aplikasi Zevrigo Node (DEC-44, RENCANA_T16): build dan uji di Linux (AppImage) dan Windows (installer NSIS).
+# Jalan saat main berubah di app/ atau di workflow ini, atau manual (workflow_dispatch). Hasilnya artefak untuk dicoba pencipta
+# (Q194b); rilis (tag, draf, terbit) ditambahkan sesudah nama tag diputuskan pencipta (Q194c).
+# Sidecar zevrigo-node dan zevrigo-miner dibangun dari repo inti pada ZEVRIGO_CORE_REF (sama dengan paket peserta
+# peserta-demo-zevrigo), lalu ditaruh di app/src-tauri/binaries/<nama>-<target triple> untuk Tauri `externalBin`.
+
+name: Aplikasi Zevrigo Node
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["app/**", ".github/workflows/rilis-node-app.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-app-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZEVRIGO_CORE_REF: be71d5750b4a67d02f1d66e965637eade6780191
+  CARGO_TERM_COLOR: never
+  CI: "true"
+
+jobs:
+  linux:
+    name: Linux x86_64 (AppImage)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zevrigo-demo
+          persist-credentials: false
+
+      - name: Checkout repo inti (crate dan sidecar zevrigo-*)
+        uses: actions/checkout@v4
+        with:
+          repository: badakbesi/zevrigo
+          ref: ${{ env.ZEVRIGO_CORE_REF }}
+          path: zevrigo
+          persist-credentials: false
+
+      - name: Toolchain Rust (rust-toolchain.toml kedua repo)
+        run: |
+          (cd zevrigo && rustup toolchain install && rustc --version)
+          (cd zevrigo-demo && rustup toolchain install && rustc --version)
+
+      - name: Pustaka sistem (WebKitGTK 4.1 untuk Tauri, cmake + g++ untuk RandomX, patchelf untuk AppImage)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev librsvg2-dev libxdo-dev \
+            libayatana-appindicator3-dev cmake make g++ pkg-config patchelf file
+
+      - name: Sidecar node dan miner (repo inti, Cargo.lock tetap)
+        run: |
+          set -euo pipefail
+          (cd zevrigo && cargo build --release --locked -p zevrigo-node -p zevrigo-miner)
+          T=$(rustc -vV | sed -n 's/^host: //p')
+          mkdir -p zevrigo-demo/app/src-tauri/binaries
+          for b in zevrigo-node zevrigo-miner; do install -m 755 "zevrigo/target/release/$b" "zevrigo-demo/app/src-tauri/binaries/$b-$T"; done
+          ls -l zevrigo-demo/app/src-tauri/binaries
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: make app-check (antarmuka, fmt, clippy, larangan, test)
+        working-directory: zevrigo-demo
+        run: make app-check
+
+      - name: AppImage
+        working-directory: zevrigo-demo/app
+        run: |
+          set -euo pipefail
+          npm run tauri -- build --bundles appimage -- --locked
+          V=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+          A=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -n 1)
+          mkdir -p ../rilis && cp "$A" "../rilis/zevrigo-node-$V-x86_64.AppImage"
+          cd ../rilis && chmod +x ./*.AppImage
+          ./zevrigo-node-$V-x86_64.AppImage --appimage-extract > /dev/null
+          ls squashfs-root/usr/bin
+          for b in zevrigo-node zevrigo-miner zevrigo-node-app; do [ -x "squashfs-root/usr/bin/$b" ] || { echo "AppImage tanpa $b"; exit 1; }; done
+          squashfs-root/usr/bin/zevrigo-node --version
+          rm -rf squashfs-root
+          sha256sum ./*.AppImage | tee SHA256SUMS-linux.txt
+
+      - name: Artefak
+        uses: actions/upload-artifact@v4
+        with:
+          name: zevrigo-node-linux
+          path: zevrigo-demo/rilis/
+          retention-days: 30
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64 (installer NSIS)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zevrigo-demo
+          persist-credentials: false
+
+      - name: Checkout repo inti (crate dan sidecar zevrigo-*)
+        uses: actions/checkout@v4
+        with:
+          repository: badakbesi/zevrigo
+          ref: ${{ env.ZEVRIGO_CORE_REF }}
+          path: zevrigo
+          persist-credentials: false
+
+      - name: Toolchain Rust (rust-toolchain.toml kedua repo)
+        run: |
+          Push-Location zevrigo; rustup toolchain install; rustc --version; Pop-Location
+          Push-Location zevrigo-demo; rustup toolchain install; rustc --version; Pop-Location
+
+      - name: Sidecar node dan miner (repo inti, Cargo.lock tetap; RandomX lewat cmake + MSVC)
+        run: |
+          Push-Location zevrigo
+          cargo build --release --locked -p zevrigo-node -p zevrigo-miner
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Pop-Location
+          $t = ((rustc -vV) | Select-String '^host: (.+)$').Matches[0].Groups[1].Value
+          New-Item -ItemType Directory -Force -Path zevrigo-demo/app/src-tauri/binaries | Out-Null
+          foreach ($b in 'zevrigo-node', 'zevrigo-miner') {
+            Copy-Item "zevrigo/target/release/$b.exe" "zevrigo-demo/app/src-tauri/binaries/$b-$t.exe"
+          }
+          Get-ChildItem zevrigo-demo/app/src-tauri/binaries
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Antarmuka (npm ci tanpa skrip pasang, typecheck, test, build)
+        working-directory: zevrigo-demo/app
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          npm run check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Backend (fmt, clippy, test)
+        working-directory: zevrigo-demo/app/src-tauri
+        run: |
+          cargo fmt -- --check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cargo clippy --locked --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cargo test --locked
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Installer NSIS
+        working-directory: zevrigo-demo/app
+        run: |
+          npm run tauri -- build -- --locked
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          foreach ($b in 'zevrigo-node.exe', 'zevrigo-miner.exe', 'zevrigo-node-app.exe') {
+            if (-not (Test-Path "src-tauri/target/release/$b")) { Write-Error "target/release tanpa $b"; exit 1 }
+          }
+          & src-tauri/target/release/zevrigo-node.exe --version
+          $exe = Get-ChildItem -Path src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $exe) { Write-Error 'installer tidak ditemukan'; exit 1 }
+          New-Item -ItemType Directory -Force -Path ../rilis | Out-Null
+          $nama = "zevrigo-node-$v-x64-setup.exe"
+          Copy-Item $exe.FullName (Join-Path ../rilis $nama)
+          $sha = (Get-FileHash -Algorithm SHA256 (Join-Path ../rilis $nama)).Hash.ToLower()
+          "$sha  $nama" | Out-File -Encoding ascii -NoNewline ../rilis/SHA256SUMS-windows.txt
+          Write-Output "$sha  $nama"
+
+      - name: Artefak
+        uses: actions/upload-artifact@v4
+        with:
+          name: zevrigo-node-windows
+          path: zevrigo-demo/rilis/
+          retention-days: 30
+          if-no-files-found: error

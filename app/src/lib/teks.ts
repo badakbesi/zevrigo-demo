@@ -1,0 +1,117 @@
+export const TEKS = {
+  app: {
+    nama: 'Zevrigo Node',
+    lencanaDemo: 'Jaringan demo (regtest)',
+    spandukPeringatan:
+      'Koin jaringan demo tidak bernilai. Jangan menukar atau membeli ZVRG demo.',
+    tutupSpanduk: 'Tutup pemberitahuan',
+    menutupAplikasi: 'Menghentikan node dengan aman...',
+    menutupAplikasiSub: 'Mohon tunggu sebentar hingga seluruh proses berhenti rapi.',
+  },
+  tema: {
+    labelTombol: 'Ganti tema tampilan',
+    sistem: 'Tema: Sistem',
+    terang: 'Tema: Terang',
+    gelap: 'Tema: Gelap',
+  },
+  node: {
+    judul: 'Node',
+    nyalakan: 'Nyalakan node',
+    hentikan: 'Hentikan node',
+    sedangMenyalakan: 'Menyalakan...',
+    sedangMenghentikan: 'Menghentikan...',
+    labelStatus: 'Status node',
+    status: {
+      mati: 'Mati',
+      menyala: 'Menyala',
+      menyambung: 'Menyambung ke jaringan',
+      mengejar: 'Mengejar chain',
+      sinkron: 'Sinkron',
+      galat: 'Galat',
+    },
+    tinggiLokal: 'Tinggi blok lokal',
+    tinggiJaringan: 'Tinggi jaringan',
+    kemajuanSinkron: (lokal: string, jaringan: string) =>
+      `${lokal} dari ${jaringan} blok`,
+    rekanTersambung: 'Rekan tersambung',
+    folderData: 'Folder data',
+    bukaFolder: 'Buka folder',
+    bantuan:
+      'Node tersambung sendiri ke seed resmi demo-seed-p2p.zevrigo.online; RPC hanya di komputer ini.',
+    konfirmasiHentikanJudul: 'Penambang sedang berjalan',
+    konfirmasiHentikanIsi:
+      'Menghentikan node akan menghentikan penambang terlebih dahulu. Lanjutkan?',
+    konfirmasiYa: 'Ya, hentikan semua',
+    konfirmasiBatal: 'Batal',
+  },
+  tambang: {
+    judul: 'Menambang',
+    labelAlamat: 'Alamat hadiah',
+    placeholderAlamat: 'Tempel alamat rzvrg1... dari Zevrigo Wallet',
+    tombolTempel: 'Tempel',
+    gagalTempel: 'Tidak dapat membaca papan klip. Silakan tempel langsung dengan Ctrl+V.',
+    statusAlamat: {
+      kosong: 'Masukkan alamat penerimaan Zevrigo demo terlebih dahulu.',
+      format: 'Format alamat tidak sesuai. Gunakan alamat rzvrg1 huruf kecil dari Zevrigo Wallet.',
+      jaringanLain:
+        'Alamat ini berasal dari jaringan lain (bukan jaringan demo rzvrg1).',
+      sah: 'Alamat sah',
+      memeriksa: 'Memeriksa alamat...',
+    },
+    labelJeda: 'Jeda antar blok',
+    opsiJeda: {
+      satuMenit: '1 menit',
+      duaMenit: '2 menit',
+      duaMenitRekomendasi: 'disarankan, adil bagi peserta lain',
+      limaMenit: '5 menit',
+    },
+    mulai: 'Mulai menambang',
+    berhenti: 'Berhenti',
+    alasanNonaktif: {
+      nodeDanAlamat: 'Nyalakan node hingga sinkron dan isi alamat hadiah yang sah.',
+      nodeBelumSinkron: 'Tunggu hingga status node Sinkron sebelum mulai menambang.',
+      alamatBelumSah: 'Isi alamat hadiah jaringan demo (rzvrg1...) yang sah.',
+    },
+    labelStatus: 'Status penambang',
+    status: {
+      berhenti: 'Berhenti',
+      menambang: 'Menambang blok...',
+      menunggu: 'Menunggu jeda',
+    },
+    blokSesiIni: 'Blok ditemukan sesi ini',
+    daftarBlokJudul: '5 blok terakhir yang ditemukan',
+    belumAdaBlok: 'Belum ada blok ditemukan pada sesi ini.',
+    tinggiBlokPrefix: 'Blok #',
+    lihatDiExplorer: 'Lihat di explorer',
+    catatanHadiah:
+      'Hadiah blok bisa dipakai sesudah 100 blok; saldo dilihat di Zevrigo Wallet.',
+  },
+  log: {
+    judul: 'Log Aktivitas',
+    saring: {
+      semua: 'Semua',
+      node: 'Node',
+      penambang: 'Penambang',
+    },
+    salinLog: 'Salin log',
+    tersalin: 'Tersalin',
+    laporkanMasalah: 'Laporkan masalah',
+    lompatKeBawah: 'Ke baris terbaru',
+    kosong: 'Belum ada catatan aktivitas. Nyalakan node untuk memulai.',
+    sumber: {
+      node: 'node',
+      penambang: 'tambang',
+      aplikasi: 'app',
+    },
+  },
+  galat: {
+    detailTeknis: 'Detail teknis',
+    salinDetail: 'Salin detail',
+    tersalin: 'Detail tersalin',
+  },
+  kaki: {
+    panduan: 'Panduan',
+    explorer: 'Explorer',
+    simulasiGalat: 'Simulasikan galat node',
+  },
+} as const;

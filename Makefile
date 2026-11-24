@@ -1,5 +1,5 @@
 # Zevrigo Demo (MOD-18). Crate inti dari ../zevrigo (AGENDA P3).
-.PHONY: fmt fmt-check lint check-forbidden test deps check-all docker-build
+.PHONY: fmt fmt-check lint check-forbidden test deps check-all docker-build app-web-check app-check
 
 fmt:
 	cargo fmt --all
@@ -26,3 +26,12 @@ check-all: fmt-check lint check-forbidden test
 # yang masuk konteks diatur Dockerfile.dockerignore.
 docker-build:
 	docker build -f Dockerfile -t zevrigo:regtest ..
+
+# Aplikasi Zevrigo Node (DEC-44, RENCANA_T16): antarmuka (npm ci tanpa skrip pasang, typecheck, test, build ke app/dist), lalu
+# backend Tauri di workspace Cargo sendiri dengan Cargo.lock sendiri. Butuh sidecar di app/src-tauri/binaries/ dan WebKitGTK 4.1 di
+# Linux. Larangan f32/f64/unsafe sama dengan repo ini.
+app-web-check:
+	cd app && npm ci --ignore-scripts --no-audit --no-fund && npm run check
+
+app-check: app-web-check
+	cd app/src-tauri && cargo fmt -- --check && cargo clippy --locked --all-targets -- -D warnings && bash ../../scripts/check-forbidden.sh && cargo test --locked
