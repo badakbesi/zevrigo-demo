@@ -17,6 +17,17 @@ yang dijalankan sebagai tiga proses di belakang Cloudflare Tunnel, masing-masing
 - Aplikasi desktop **Zevrigo Node** (DEC-44, RENCANA_T16) di `app/`: antarmuka React + backend Tauri 2 (`app/src-tauri`, workspace
   Cargo sendiri, bukan bagian program `zevrigo-demo`). Menjalankan `zevrigo-node --seed-resmi` dan `zevrigo-miner --blocks 1`
   dengan jeda 60/120/300 detik sebagai sidecar, hadiah ke alamat Zevrigo Wallet yang ditempel; tanpa kunci rahasia.
+- Crate `zevrigo-node-mesin` di `mesin/` (DEC-45, Q196a): mesin node + penambang aplikasi Zevrigo Node (dipindah dari
+  `app/src-tauri/src/mesin`), anggota workspace ini, dipakai aplikasi desktop (lewat path) dan mode `pengendali`.
+- `zevrigo-demo pengendali --datadir <dir> --token-sha256 <berkas> [--http-bind <ip>] [--http-port <port>] [--rate <n>]
+  [--trust-proxy-host <nama>] [--nyalakan-node]` (DEC-45, RENCANA_T17): pengendali jarak jauh untuk aplikasi Zevrigo Node di
+  Android. Menjalankan node `--seed-resmi` dan penambang sendiri (program `zevrigo-node`, `zevrigo-miner` di samping program
+  ini), tanpa Docker socket. Satu permintaan JSON-RPC 2.0 per `POST` dengan `Authorization: Bearer <token>`; hanya metode
+  `info`, `keadaan_node`, `keadaan_tambang`, `log_terbaru`, `muat_pengaturan`, `simpan_pengaturan`, `periksa_alamat`,
+  `nyalakan_node`, `hentikan_node`, `mulai_tambang`, `berhenti_tambang`. SHA-256 token di berkas (dibaca ulang setiap
+  permintaan), perbandingan tanpa berhenti di byte pertama yang beda, `401` tanpa token yang benar, `429` untuk token salah
+  berulang dan batas laju (bawaan 5 per detik), `405`, `413` di atas 16 KiB. Perintah kendali dicatat di log program dan log
+  mesin. Port bawaan 28808. Di depannya Cloudflare Access service token (keputusan pencipta).
 
 - `zevrigo-demo rpc [--node-url <url>] [--http-bind <ip>] [--http-port <port>] [--rate <n>] [--trust-proxy]` (TSK-M53):
   gerbang RPC untuk wallet peserta di `127.0.0.1:28804` (bawaan). Satu permintaan JSON-RPC 2.0 per `POST`; hanya

@@ -11,6 +11,8 @@
 //!   alamat dan paling banyak 5 kali per pengunjung dalam 24 jam, dengan batas harian. Tanpa menyimpan alamat IP.
 //! - `web` ([`site`], TSK-M64): situs statis, misalnya blog resmi `apps/blog`, dengan aturan penyajian yang sama dengan
 //!   explorer (jalur aman, kebijakan keamanan konten dengan hash skrip inline).
+//! - `pengendali` ([`pengendali`], DEC-45, RENCANA_T17): pengendali jarak jauh Zevrigo Node di VPS. Menjalankan node dan
+//!   penambang sendiri lewat mesin aplikasi desktop (`zevrigo-node-mesin`) dan menerima perintah JSON-RPC bertoken.
 //! - `daftar` (TSK-M55): belum tersedia.
 //!
 //! [`cli`] membaca argumen program.
@@ -21,14 +23,15 @@ pub mod cli;
 pub mod faucet;
 pub mod gateway;
 pub mod limit;
+pub mod pengendali;
 pub mod site;
 pub mod upacara;
 
 pub use cli::{
     ArgError, Command, DEFAULT_DAILY_LIMIT, DEFAULT_FAUCET_AMOUNT, DEFAULT_FAUCET_PORT,
-    DEFAULT_FAUCET_RATE, DEFAULT_NODE_URL, DEFAULT_ORIGIN, DEFAULT_RATE, DEFAULT_RPC_PORT,
-    DEFAULT_WEB_PORT, FaucetConfig, RpcConfig, USAGE, UpacaraConfig, WebConfig, parse_args,
-    parse_pocket,
+    DEFAULT_FAUCET_RATE, DEFAULT_NODE_URL, DEFAULT_ORIGIN, DEFAULT_PENGENDALI_PORT,
+    DEFAULT_PENGENDALI_RATE, DEFAULT_RATE, DEFAULT_RPC_PORT, DEFAULT_WEB_PORT, FaucetConfig,
+    PengendaliConfig, RpcConfig, USAGE, UpacaraConfig, WebConfig, parse_args, parse_pocket,
 };
 pub use faucet::{
     FAUCET_PATH, Faucet, FaucetError, FaucetStatus, Payout, RouterOptions, Settings,
@@ -39,6 +42,7 @@ pub use gateway::{
     parse_call, router, run_rpc,
 };
 pub use limit::{Limits, MAX_CLIENTS, Rate, RateLimiter};
+pub use pengendali::{METODE_PENGENDALI, run_pengendali};
 pub use site::run_web;
 pub use upacara::{
     GENESIS_PAYLOAD, MAX_POCKETS, Pocket, REGTEST_NETWORK_ID, UpacaraError, build_ceremony,

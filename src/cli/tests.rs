@@ -438,3 +438,99 @@ fn parses_web_mode() {
     }
     assert!(USAGE.contains("zevrigo-demo web --web-dir <dir>"));
 }
+
+#[test]
+fn parses_pengendali_mode() {
+    use std::path::PathBuf;
+
+    use super::{DEFAULT_PENGENDALI_PORT, DEFAULT_PENGENDALI_RATE, PengendaliConfig};
+
+    let base = |extra: &[&str]| {
+        let mut list = args(&[
+            "pengendali",
+            "--datadir",
+            "/data",
+            "--token-sha256",
+            "/rahasia/token.sha256",
+        ]);
+        list.extend(args(extra));
+        list
+    };
+    assert_eq!(
+        parse_args(base(&[])),
+        Ok(Command::Pengendali(PengendaliConfig {
+            datadir: PathBuf::from("/data"),
+            token_file: PathBuf::from("/rahasia/token.sha256"),
+            http_bind: IpAddr::V4(Ipv4Addr::LOCALHOST),
+            http_port: DEFAULT_PENGENDALI_PORT,
+            rate: DEFAULT_PENGENDALI_RATE,
+            trust_proxy_host: None,
+            nyalakan_node: false,
+        }))
+    );
+    assert_eq!(
+        (DEFAULT_PENGENDALI_PORT, DEFAULT_PENGENDALI_RATE),
+        (28_808, 5)
+    );
+    assert_eq!(
+        parse_args(base(&[
+            "--http-bind",
+            "0.0.0.0",
+            "--http-port",
+            "0",
+            "--rate",
+            "0",
+            "--trust-proxy-host",
+            "node",
+            "--nyalakan-node",
+        ])),
+        Ok(Command::Pengendali(PengendaliConfig {
+            datadir: PathBuf::from("/data"),
+            token_file: PathBuf::from("/rahasia/token.sha256"),
+            http_bind: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            http_port: 0,
+            rate: 0,
+            trust_proxy_host: Some("node".to_owned()),
+            nyalakan_node: true,
+        }))
+    );
+    let cases: Vec<(Vec<String>, ArgError)> = vec![
+        (
+            args(&["pengendali", "--token-sha256", "t"]),
+            ArgError::MissingOption("--datadir"),
+        ),
+        (
+            args(&["pengendali", "--datadir", "d"]),
+            ArgError::MissingOption("--token-sha256"),
+        ),
+        (
+            base(&["--nyalakan-node", "--nyalakan-node"]),
+            ArgError::Duplicate("--nyalakan-node"),
+        ),
+        (
+            base(&["--token-sha256", "lain"]),
+            ArgError::Duplicate("--token-sha256"),
+        ),
+        (
+            base(&["--http-port", "70000"]),
+            ArgError::InvalidPort("70000".to_owned()),
+        ),
+        (
+            base(&["--trust-proxy"]),
+            ArgError::Unknown("--trust-proxy".to_owned()),
+        ),
+        (base(&["--help"]), ArgError::Exclusive),
+    ];
+    for (list, error) in cases {
+        assert_eq!(parse_args(list.clone()), Err(error), "{list:?}");
+    }
+    for word in [
+        "pengendali",
+        "--token-sha256",
+        "--nyalakan-node",
+        "mulai_tambang",
+        "28808",
+    ] {
+        assert!(USAGE.contains(word), "{word}");
+    }
+}

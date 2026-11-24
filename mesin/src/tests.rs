@@ -121,7 +121,18 @@ fn node_status_follows_observations() {
         status_node(true, false, false, Some(11), Some(10), 2),
         "sinkron"
     );
-    assert_eq!(status_node(true, false, false, Some(3), None, 1), "sinkron");
+    assert_eq!(
+        status_node(true, false, false, Some(3), None, 1),
+        "mengejar"
+    );
+    assert_eq!(
+        status_node(true, false, false, Some(0), None, 1),
+        "mengejar"
+    );
+    assert_eq!(
+        status_node(false, true, false, Some(10), None, 0),
+        "mengejar"
+    );
     assert_eq!(
         status_node(false, true, false, Some(10), Some(10), 0),
         "sinkron"
@@ -259,6 +270,11 @@ fn real_node_syncs_mines_and_stops() {
     println!("node: {node:?}");
     assert!(sinkron, "node tidak sinkron dalam 10 menit: {node:?}");
     assert!(node.rekan >= 1);
+    let jaringan = node.tinggi_jaringan.unwrap();
+    assert!(
+        jaringan > 0 && node.tinggi_lokal.unwrap() >= jaringan,
+        "{node:?}"
+    );
 
     let alamat = encode_address(Network::Regtest, OutputKind::SingleKey, &[0x5a; 32]);
     mesin.mulai_tambang(&alamat, 60).unwrap();

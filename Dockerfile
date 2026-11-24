@@ -30,6 +30,8 @@ COPY zevrigo-explorer/Cargo.toml zevrigo-explorer/Cargo.lock ./zevrigo-explorer/
 COPY zevrigo-explorer/src ./zevrigo-explorer/src
 COPY zevrigo-demo/Cargo.toml zevrigo-demo/Cargo.lock ./zevrigo-demo/
 COPY zevrigo-demo/src ./zevrigo-demo/src
+# Mesin Zevrigo Node (DEC-45, Q196a): anggota workspace zevrigo-demo, dipakai mode `pengendali`.
+COPY zevrigo-demo/mesin ./zevrigo-demo/mesin
 # Penjaga daftar izin: bila Dockerfile.dockerignore tidak dipakai, konteks memuat seluruh repo dan build berhenti di sini.
 RUN for f in zevrigo/rust-toolchain.toml zevrigo/.cargo zevrigo/target zevrigo/docs zevrigo/.git; do \
       if [ -e "$f" ]; then echo "konteks build memuat $f: Dockerfile.dockerignore tidak dipakai" >&2; exit 1; fi; \

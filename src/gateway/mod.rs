@@ -83,6 +83,9 @@ pub enum DemoError {
     /// Folder situs tidak berisi `index.html` (mode `web`).
     #[error("folder web tidak berisi index.html: {0}")]
     WebDir(String),
+    /// Berkas token tidak sah (mode `pengendali`).
+    #[error("pengendali: {0}")]
+    Pengendali(String),
 }
 
 /// Satu permintaan JSON-RPC yang lolos pemeriksaan gerbang dan boleh diteruskan ke node.

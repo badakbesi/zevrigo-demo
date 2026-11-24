@@ -2170,6 +2170,19 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "zevrigo-crypto",
+ "zevrigo-node-mesin",
+ "zevrigo-primitives",
+ "zevrigo-rpc",
+ "zevrigo-wallet-core",
+]
+
+[[package]]
+name = "zevrigo-node-mesin"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
  "zevrigo-primitives",
  "zevrigo-rpc",
  "zevrigo-wallet-core",

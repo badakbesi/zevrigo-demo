@@ -98,3 +98,9 @@ Lisensi: MIT OR Apache-2.0 (DEC-02).
 Aplikasi desktop Windows dan Linux (DEC-44): node dan penambang jaringan demo dengan antarmuka, tanpa terminal. Sidecar
 `zevrigo-node` dan `zevrigo-miner` sama dengan paket peserta; hadiah ke alamat Zevrigo Wallet yang ditempel. Rincian di
 [app/README.md](app/README.md); dibangun dan diuji workflow [rilis-node-app.yml](.github/workflows/rilis-node-app.yml).
+
+## Pengendali jarak jauh (`pengendali`) dan mesin (`mesin/`)
+
+Mode `zevrigo-demo pengendali` (DEC-45) menjalankan node dan penambang di VPS dan menerima perintah bertoken dari aplikasi
+Zevrigo Node di Android (RENCANA_T17). Mesinnya crate [`mesin/`](mesin), sama dengan aplikasi desktop. Rincian opsi di
+`zevrigo-demo --help` dan [MOD-18](docs/modules/MOD-18-demo.md).

@@ -2,18 +2,18 @@
 //!
 //! Antarmuka React (`../src`) memanggil perintah IPC di `perintah`. Node dan penambang adalah program `zevrigo-node` dan
 //! `zevrigo-miner` dari repo inti yang dibawa sebagai sidecar (Tauri `externalBin`) dan dijalankan sebagai proses anak oleh
-//! `mesin`. Folder data sama dengan paket peserta (`~/.zevrigo`, `%USERPROFILE%\.zevrigo`, atau `ZVRG_DATA`). Aplikasi tidak
+//! `mesin` (crate `zevrigo-node-mesin` di zevrigo-demo/mesin, DEC-45). Folder data sama dengan paket peserta (`~/.zevrigo`, `%USERPROFILE%\.zevrigo`, atau `ZVRG_DATA`). Aplikasi tidak
 //! membuat dan tidak menyimpan kunci rahasia: hadiah tambang ke alamat Zevrigo Wallet yang ditempel pengguna.
 
 #![forbid(unsafe_code)]
 
-mod mesin;
 mod perintah;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::Manager as _;
+use zevrigo_node_mesin as mesin;
 
 /// Batas waktu antarmuka menghentikan node dengan rapi sesudah jendela ditutup; sesudah itu aplikasi menghentikannya sendiri.
 const BATAS_TUTUP: Duration = Duration::from_secs(45);

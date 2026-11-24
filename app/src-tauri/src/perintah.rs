@@ -1,6 +1,6 @@
 //! Perintah IPC Tauri untuk antarmuka (kontrak `Backend` di src/lib/backend.ts). Pekerjaan yang bisa menunggu (menyalakan dan
-//! menghentikan node, menghentikan penambang) berjalan di utas sendiri tanpa konteks runtime Tauri, karena MOD-12 memakai
-//! runtime tokio sendiri (pola wallet MOD-15).
+//! menghentikan node, menghentikan penambang) berjalan di utas sendiri tanpa konteks runtime Tauri, karena mesin memakai
+//! runtime tokio sendiri untuk klien RPC (pola wallet MOD-15).
 
 use std::sync::Arc;
 

@@ -17,6 +17,7 @@
 !zevrigo-demo/Cargo.toml
 !zevrigo-demo/Cargo.lock
 !zevrigo-demo/src
+!zevrigo-demo/mesin
 !zevrigo-blog
 # Hasil build dan paket npm. Jangan memakai pola **/target atau **/out: crates/pow/src/target adalah modul Rust (Q151
 # percobaan 1 gagal karena itu).

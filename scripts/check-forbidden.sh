@@ -12,7 +12,7 @@
 set -euo pipefail
 
 scan_dirs=()
-for d in src; do
+for d in src mesin/src; do
     if [[ -d "$d" ]]; then
         scan_dirs+=("$d")
     fi

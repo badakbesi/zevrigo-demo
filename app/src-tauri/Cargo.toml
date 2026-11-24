@@ -1,7 +1,7 @@
 # Aplikasi Zevrigo Node untuk Windows dan Linux (RENCANA_T16, DEC-44; pencipta 24 November 2026). Workspace Cargo sendiri dengan
 # Cargo.lock sendiri, terpisah dari program zevrigo-demo di akar repo: Cargo.lock akar, paket Docker, dan CI demo tidak berubah.
 # Aturan lint dan toolchain (rust-toolchain.toml akar) sama dengan repo ini. Cargo.lock aplikasi ini adalah bagian dari Cargo.lock
-# wallet MOD-15 (diperiksa skrip gerbang Q194).
+# wallet MOD-15 (diperiksa skrip gerbang Q194, Q196a).
 [package]
 name = "zevrigo-node-app"
 version = "0.1.0"
@@ -29,11 +29,9 @@ tauri.workspace = true
 tauri-plugin-opener.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-# Tinggi chain node lokal dan gerbang RPC publik (MOD-12 di atas MOD-08, termasuk HTTPS dan coba ulang saat 429).
-zevrigo-cli.workspace = true
-# Alamat hadiah bech32m menjadi payload miner (MOD-09); tanpa kunci rahasia.
-zevrigo-wallet-core.workspace = true
-zevrigo-primitives.workspace = true
+# Mesin node + penambang (DEC-45, Q196a): crate zevrigo-demo/mesin, dipakai juga mode `pengendali` zevrigo-demo. Membawa
+# MOD-08 (tinggi chain lokal dan gerbang publik) dan MOD-09 (alamat hadiah); tanpa kunci rahasia.
+zevrigo-node-mesin.workspace = true
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -66,7 +64,5 @@ tauri-build = { version = "=2.7.2" }
 tauri-plugin-opener = { version = "=2.7.3" }
 serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
-# Crate inti dari repo `zevrigo` di folder sebelah zevrigo-demo (AGENDA P3), lewat path.
-zevrigo-cli = { path = "../../../zevrigo/apps/cli" }
-zevrigo-wallet-core = { path = "../../../zevrigo/crates/wallet-core" }
-zevrigo-primitives = { path = "../../../zevrigo/crates/primitives" }
+# Mesin di repo ini (folder zevrigo-demo/mesin); crate inti di dalamnya dari repo `zevrigo` di folder sebelah (AGENDA P3).
+zevrigo-node-mesin = { path = "../../mesin" }

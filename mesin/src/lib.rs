@@ -1,12 +1,16 @@
-//! Mesin aplikasi Zevrigo Node (RENCANA_T16 bagian 8, DEC-44), tanpa tipe Tauri agar bisa diuji sendiri.
+//! Mesin Zevrigo Node (DEC-44, DEC-45): node dan penambang jaringan demo regtest sebagai proses anak, tanpa tipe Tauri dan
+//! tanpa server, agar dipakai bersama oleh aplikasi desktop Zevrigo Node (`app/src-tauri`, sidecar) dan pengendali jarak jauh
+//! di VPS (mode `pengendali` program zevrigo-demo, RENCANA_T17). Dipindah dari `app/src-tauri/src/mesin` (Q196a).
 //!
 //! - Node: proses anak `zevrigo-node --regtest --datadir <folder> --seed-resmi`; keluarannya masuk log, jumlah rekan dihitung
 //!   dari baris `rekan terhubung` / `rekan terputus`. Bila RPC 127.0.0.1:28801 sudah menjawab sebelum dinyalakan, node lain itu
-//!   dipakai apa adanya (seperti skrip awal paket peserta) dan tidak dimatikan aplikasi.
-//! - Pemantau: tinggi lokal dari RPC node setiap 2 detik, tinggi jaringan dari gerbang RPC publik setiap 15 detik (MOD-12).
+//!   dipakai apa adanya (seperti skrip awal paket peserta) dan tidak dimatikan.
+//! - Pemantau: tinggi lokal dari RPC node setiap 2 detik, tinggi jaringan dari gerbang RPC publik setiap 15 detik (MOD-08).
 //! - Penambang: putaran `zevrigo-miner --payout <payload> --payout-kind <k> --blocks 1`, baris `blok diterima: tinggi N, ...,
 //!   id X` dicatat, lalu jeda 60, 120, atau 300 detik.
-//! - Alamat hadiah diurai MOD-09 (`decode_address`) menjadi payload. Tidak ada kunci rahasia di aplikasi.
+//! - Alamat hadiah diurai MOD-09 (`decode_address`) menjadi payload. Tidak ada kunci rahasia di mesin ini.
+
+#![forbid(unsafe_code)]
 
 use std::collections::VecDeque;
 use std::fmt::Write as _;
@@ -19,8 +23,9 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use zevrigo_cli::Cli;
+use tokio::runtime::Runtime;
 use zevrigo_primitives::Network;
+use zevrigo_rpc::RpcClient;
 use zevrigo_wallet_core::{AddressError, decode_address};
 
 /// RPC node lokal (bawaan regtest node dan miner).
@@ -58,7 +63,7 @@ fn kunci<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// Keadaan node untuk antarmuka (`KeadaanNode` di src/lib/backend.ts).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct KeadaanNode {
+pub struct KeadaanNode {
     pub(crate) status: &'static str,
     pub(crate) tinggi_lokal: Option<u64>,
     pub(crate) tinggi_jaringan: Option<u64>,
@@ -71,7 +76,7 @@ pub(crate) struct KeadaanNode {
 /// Blok yang ditemukan penambang.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct BlokDitemukan {
+pub struct BlokDitemukan {
     pub(crate) tinggi: u64,
     pub(crate) id_blok: String,
     pub(crate) waktu: u64,
@@ -80,7 +85,7 @@ pub(crate) struct BlokDitemukan {
 /// Keadaan penambang untuk antarmuka.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct KeadaanTambang {
+pub struct KeadaanTambang {
     pub(crate) status: &'static str,
     pub(crate) alamat: Option<String>,
     pub(crate) jeda_detik: u64,
@@ -93,7 +98,7 @@ pub(crate) struct KeadaanTambang {
 
 /// Satu baris log.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct BarisLog {
+pub struct BarisLog {
     pub(crate) waktu: u64,
     pub(crate) sumber: &'static str,
     pub(crate) tingkat: &'static str,
@@ -103,7 +108,7 @@ pub(crate) struct BarisLog {
 /// Pengaturan yang disimpan di folder data.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
-pub(crate) struct Pengaturan {
+pub struct Pengaturan {
     pub(crate) alamat_hadiah: String,
     pub(crate) jeda_detik: u64,
     pub(crate) tema: String,
@@ -142,13 +147,13 @@ impl Pengaturan {
 
 /// Hasil pemeriksaan alamat hadiah.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct HasilPeriksaAlamat {
+pub struct HasilPeriksaAlamat {
     pub(crate) sah: bool,
     pub(crate) alasan: Option<&'static str>,
 }
 
 /// Mengurai alamat hadiah regtest menjadi hasil pemeriksaan dan, bila sah, `(jenis output, payload hex)` untuk miner.
-pub(crate) fn periksa_alamat(alamat: &str) -> (HasilPeriksaAlamat, Option<(u8, String)>) {
+pub fn periksa_alamat(alamat: &str) -> (HasilPeriksaAlamat, Option<(u8, String)>) {
     let alamat = alamat.trim();
     if alamat.is_empty() {
         let hasil = HasilPeriksaAlamat {
@@ -247,7 +252,7 @@ pub(crate) fn bersihkan_baris(baris: &str) -> String {
 }
 
 /// `true` bila `url` adalah tautan resmi yang boleh dibuka aplikasi di browser sistem.
-pub(crate) fn tautan_resmi(url: &str) -> bool {
+pub fn tautan_resmi(url: &str) -> bool {
     url == "https://zevrigo.online/"
         || url.starts_with("https://zevrigo.online/unduh/")
         || url.starts_with("https://zevrigo.online/artikel/")
@@ -256,7 +261,9 @@ pub(crate) fn tautan_resmi(url: &str) -> bool {
         || url == "https://github.com/badakbesi/zevrigo-demo/issues"
 }
 
-/// Status node dari pengamatan (lihat [`Mesin::keadaan_node`]).
+/// Status node dari pengamatan (lihat [`Mesin::keadaan_node`]). `sinkron` hanya bila tinggi jaringan sudah diketahui dan
+/// tinggi lokal sudah menyamainya; selama tinggi jaringan belum terbaca (gerbang publik belum menjawab) status `mengejar`, agar
+/// penambang tidak mulai di atas chain yang belum sinkron (Q196a percobaan 2: blok 1 di atas tinggi 0).
 pub(crate) fn status_node(
     berjalan: bool,
     luar: bool,
@@ -279,8 +286,7 @@ pub(crate) fn status_node(
     }
     match tinggi_jaringan {
         Some(jaringan) if lokal >= jaringan => "sinkron",
-        Some(_) => "mengejar",
-        None => "sinkron",
+        Some(_) | None => "mengejar",
     }
 }
 
@@ -363,7 +369,7 @@ impl Default for Tambang {
 
 /// Mesin aplikasi: satu per proses, dibagi semua perintah lewat `Arc`.
 #[derive(Debug)]
-pub(crate) struct Mesin {
+pub struct Mesin {
     folder: PathBuf,
     bin_node: PathBuf,
     bin_miner: PathBuf,
@@ -379,7 +385,7 @@ pub(crate) struct Mesin {
 }
 
 /// Folder data bawaan, sama dengan paket peserta: `ZVRG_DATA`, atau `%USERPROFILE%\.zevrigo` (Windows) / `~/.zevrigo`.
-pub(crate) fn folder_data_bawaan() -> Option<PathBuf> {
+pub fn folder_data_bawaan() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("ZVRG_DATA").filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(dir));
     }
@@ -390,7 +396,7 @@ pub(crate) fn folder_data_bawaan() -> Option<PathBuf> {
 }
 
 /// Path sidecar `nama` di samping program aplikasi (Tauri `externalBin`), atau dari variabel lingkungan `ganti` (uji).
-pub(crate) fn bin_sidecar(nama: &str, ganti: &str) -> PathBuf {
+pub fn bin_sidecar(nama: &str, ganti: &str) -> PathBuf {
     if let Some(path) = std::env::var_os(ganti).filter(|p| !p.is_empty()) {
         return PathBuf::from(path);
     }
@@ -422,13 +428,36 @@ fn sembunyikan_jendela(cmd: &mut Command) {
 #[cfg(not(windows))]
 fn sembunyikan_jendela(_cmd: &mut Command) {}
 
-/// Tinggi chain node klien `cli`, atau `None` bila tidak menjawab.
-fn tinggi_di(cli: Option<&Cli>) -> Option<u64> {
-    cli.and_then(|c| c.info().ok()).map(|info| info.height)
+/// Klien RPC dengan runtime tokio sendiri (dipakai dari utas biasa, tanpa konteks runtime pemanggil).
+struct Rpc {
+    runtime: Runtime,
+    klien: RpcClient,
+}
+
+impl Rpc {
+    /// Klien ke `url`, atau `None` bila runtime atau klien tidak bisa dibuat.
+    fn baru(url: &str) -> Option<Self> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()?;
+        let klien = runtime.block_on(async { RpcClient::new(url) }).ok()?;
+        Some(Self { runtime, klien })
+    }
+
+    /// Tinggi chain node, atau `None` bila tidak menjawab.
+    fn tinggi(&self) -> Option<u64> {
+        self.runtime
+            .block_on(self.klien.get_chain_info())
+            .ok()
+            .map(|info| info.height)
+    }
 }
 
 impl Mesin {
-    pub(crate) fn baru(folder: PathBuf, bin_node: PathBuf, bin_miner: PathBuf) -> Self {
+    /// Mesin baru dengan folder data `folder` dan program `bin_node`, `bin_miner`; node dan penambang belum berjalan.
+    #[must_use]
+    pub fn baru(folder: PathBuf, bin_node: PathBuf, bin_miner: PathBuf) -> Self {
         Self {
             folder,
             bin_node,
@@ -444,37 +473,42 @@ impl Mesin {
         }
     }
 
-    pub(crate) fn folder(&self) -> &Path {
+    /// Folder data node.
+    #[must_use]
+    pub fn folder(&self) -> &Path {
         &self.folder
     }
 
-    pub(crate) fn catat(&self, sumber: &'static str, teks: &str) {
+    /// Menambah satu baris log dari `sumber` (`node`, `penambang`, atau `aplikasi`).
+    pub fn catat(&self, sumber: &'static str, teks: &str) {
         kunci(&self.log).tambah(sumber, tingkat_baris(teks), teks);
     }
 
-    pub(crate) fn log_sejak(&self, waktu: Option<u64>) -> Vec<BarisLog> {
+    /// Baris log sesudah `waktu` (milidetik Unix), atau semua bila `None`.
+    #[must_use]
+    pub fn log_sejak(&self, waktu: Option<u64>) -> Vec<BarisLog> {
         kunci(&self.log).sejak(waktu)
     }
 
     /// Utas pemantau: tinggi lokal setiap 2 detik, tinggi jaringan setiap 15 detik, dan node yang berhenti sendiri.
-    pub(crate) fn mulai_pemantau(self: &Arc<Self>) {
+    pub fn mulai_pemantau(self: &Arc<Self>) {
         let mesin = Arc::clone(self);
         thread::spawn(move || {
-            let lokal = Cli::connect(RPC_LOKAL, Network::Regtest).ok();
-            let publik = Cli::connect(RPC_PUBLIK, Network::Regtest).ok();
+            let lokal = Rpc::baru(RPC_LOKAL);
+            let publik = Rpc::baru(RPC_PUBLIK);
             let mut publik_terakhir: Option<Instant> = None;
             loop {
                 mesin.periksa_node_berhenti();
                 let aktif = kunci(&mesin.node).is_some() || mesin.node_luar.load(Ordering::SeqCst);
                 let tinggi = if aktif {
-                    tinggi_di(lokal.as_ref())
+                    lokal.as_ref().and_then(Rpc::tinggi)
                 } else {
                     None
                 };
                 kunci(&mesin.pantau).tinggi_lokal = tinggi;
                 if aktif && publik_terakhir.is_none_or(|t| t.elapsed() >= Duration::from_secs(15)) {
                     publik_terakhir = Some(Instant::now());
-                    if let Some(j) = tinggi_di(publik.as_ref()) {
+                    if let Some(j) = publik.as_ref().and_then(Rpc::tinggi) {
                         kunci(&mesin.pantau).tinggi_jaringan = Some(j);
                     }
                 }
@@ -501,7 +535,9 @@ impl Mesin {
         }
     }
 
-    pub(crate) fn keadaan_node(&self) -> KeadaanNode {
+    /// Keadaan node sekarang.
+    #[must_use]
+    pub fn keadaan_node(&self) -> KeadaanNode {
         let berjalan = kunci(&self.node).is_some();
         let luar = self.node_luar.load(Ordering::SeqCst);
         let pantau = kunci(&self.pantau);
@@ -525,12 +561,20 @@ impl Mesin {
     }
 
     /// Menyalakan node. Node lain yang sudah menjawab di RPC lokal dipakai apa adanya.
-    pub(crate) fn nyalakan_node(self: &Arc<Self>) -> Result<(), String> {
+    ///
+    /// # Errors
+    ///
+    /// Keterangan bila folder data tidak bisa dibuat atau program node tidak bisa dijalankan.
+    pub fn nyalakan_node(self: &Arc<Self>) -> Result<(), String> {
         if kunci(&self.node).is_some() || self.node_luar.load(Ordering::SeqCst) {
             return Ok(());
         }
         kunci(&self.pantau).galat = None;
-        if tinggi_di(Cli::connect(RPC_LOKAL, Network::Regtest).ok().as_ref()).is_some() {
+        if Rpc::baru(RPC_LOKAL)
+            .as_ref()
+            .and_then(Rpc::tinggi)
+            .is_some()
+        {
             self.node_luar.store(true, Ordering::SeqCst);
             self.catat(
                 "aplikasi",
@@ -616,19 +660,24 @@ impl Mesin {
         });
     }
 
-    /// Menghentikan node yang dinyalakan aplikasi: SIGTERM (Unix) lalu tunggu, paksa sesudah 30 detik. Di Windows langsung
+    /// Menghentikan node yang dinyalakan mesin: SIGTERM (Unix) lalu tunggu, paksa sesudah 30 detik. Di Windows langsung
     /// dihentikan (penyimpanan chain redb dan `peers.json` aman terhadap penghentian mendadak).
-    pub(crate) fn hentikan_node(&self) {
+    pub fn hentikan_node(&self) {
         self.hentikan_tambang();
         self.node_luar.store(false, Ordering::SeqCst);
         let Some(mut child) = kunci(&self.node).take() else {
             return;
         };
-        if cfg!(unix) {
-            let _ = Command::new("kill")
-                .arg("-TERM")
+        // SIGTERM lewat `kill` bawaan sh (juga ada di image Debian slim tanpa procps); bila gagal, langsung dihentikan paksa.
+        let terkirim = cfg!(unix)
+            && Command::new("sh")
+                .arg("-c")
+                .arg("kill -TERM \"$1\"")
+                .arg("sh")
                 .arg(child.id().to_string())
-                .status();
+                .status()
+                .is_ok_and(|status| status.success());
+        if terkirim {
             let batas = Instant::now() + TUNGGU_BERHENTI;
             while Instant::now() < batas {
                 if matches!(child.try_wait(), Ok(Some(_))) {
@@ -648,11 +697,15 @@ impl Mesin {
         self.catat("aplikasi", "node dihentikan");
     }
 
-    pub(crate) fn ada_proses(&self) -> bool {
+    /// `true` bila node yang dinyalakan mesin atau penambang masih berjalan.
+    #[must_use]
+    pub fn ada_proses(&self) -> bool {
         kunci(&self.node).is_some() || kunci(&self.tambang).status != "berhenti"
     }
 
-    pub(crate) fn keadaan_tambang(&self) -> KeadaanTambang {
+    /// Keadaan penambang sekarang.
+    #[must_use]
+    pub fn keadaan_tambang(&self) -> KeadaanTambang {
         let t = kunci(&self.tambang);
         KeadaanTambang {
             status: t.status,
@@ -667,7 +720,11 @@ impl Mesin {
     }
 
     /// Mulai menambang ke `alamat` dengan jeda `jeda` detik; hanya bila node sinkron.
-    pub(crate) fn mulai_tambang(self: &Arc<Self>, alamat: &str, jeda: u64) -> Result<(), String> {
+    ///
+    /// # Errors
+    ///
+    /// Keterangan bila jeda bukan 60, 120, atau 300, alamat bukan alamat regtest yang sah, atau node belum sinkron.
+    pub fn mulai_tambang(self: &Arc<Self>, alamat: &str, jeda: u64) -> Result<(), String> {
         if !JEDA_SAH.contains(&jeda) {
             return self.tolak_tambang("jeda harus 60, 120, atau 300 detik");
         }
@@ -782,7 +839,7 @@ impl Mesin {
     }
 
     /// Menghentikan penambangan (miner yang sedang berjalan dihentikan).
-    pub(crate) fn hentikan_tambang(&self) {
+    pub fn hentikan_tambang(&self) {
         self.putaran.fetch_add(1, Ordering::SeqCst);
         if let Some(mut child) = kunci(&self.miner).take() {
             let _ = child.kill();
@@ -797,26 +854,37 @@ impl Mesin {
         }
     }
 
-    pub(crate) fn hentikan_semua(&self) {
+    /// Menghentikan penambang lalu node.
+    pub fn hentikan_semua(&self) {
         self.hentikan_tambang();
         self.hentikan_node();
     }
 
-    pub(crate) fn tandai_akan_tutup(&self) {
+    /// Menandai bahwa jendela aplikasi akan ditutup (antarmuka menghentikan penambang dan node lebih dulu).
+    pub fn tandai_akan_tutup(&self) {
         self.akan_tutup.store(true, Ordering::SeqCst);
     }
 
-    pub(crate) fn akan_tutup(&self) -> bool {
+    /// `true` sesudah [`Mesin::tandai_akan_tutup`].
+    #[must_use]
+    pub fn akan_tutup(&self) -> bool {
         self.akan_tutup.load(Ordering::SeqCst)
     }
 
-    pub(crate) fn muat_pengaturan(&self) -> Pengaturan {
+    /// Pengaturan dari folder data, atau bawaan bila belum ada atau rusak.
+    #[must_use]
+    pub fn muat_pengaturan(&self) -> Pengaturan {
         std::fs::read_to_string(self.folder.join(BERKAS_PENGATURAN))
             .map(|t| Pengaturan::dari_json(&t))
             .unwrap_or_default()
     }
 
-    pub(crate) fn simpan_pengaturan(&self, pengaturan: Pengaturan) -> Result<(), String> {
+    /// Menyimpan pengaturan yang sudah dirapikan ke folder data (berkas sementara lalu ganti nama).
+    ///
+    /// # Errors
+    ///
+    /// Keterangan bila berkas tidak bisa ditulis.
+    pub fn simpan_pengaturan(&self, pengaturan: Pengaturan) -> Result<(), String> {
         let rapi = pengaturan.rapikan();
         let teks = serde_json::to_string_pretty(&rapi).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&self.folder).map_err(|e| e.to_string())?;
@@ -827,7 +895,8 @@ impl Mesin {
     }
 
     /// Versi `zevrigo-node` (keluaran `--version`), atau teks kosong.
-    pub(crate) fn versi_node(&self) -> String {
+    #[must_use]
+    pub fn versi_node(&self) -> String {
         perintah(&self.bin_node)
             .arg("--version")
             .stdin(Stdio::null())

@@ -30,14 +30,19 @@ thiserror.workspace = true
 # Fitur `sync` (TSK-M54): `tokio::sync::Mutex` untuk wallet faucet; bagian dari paket tokio yang sama, tanpa paket baru.
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 tracing.workspace = true
+# DEC-45 (RENCANA_T17, Q196a): mode `pengendali` menjalankan node dan penambang lewat mesin yang sama dengan aplikasi desktop
+# Zevrigo Node (crate di folder mesin/, anggota workspace ini).
+zevrigo-node-mesin.workspace = true
 tracing-subscriber.workspace = true
 
 [lints]
 workspace = true
 
-# zevrigo_lab (17 November 2026, AGENDA P1): repo sendiri, paket di akar repo sekaligus akar workspace.
+# zevrigo_lab (17 November 2026, AGENDA P1): repo sendiri, paket di akar repo sekaligus akar workspace. Sejak Q196a juga
+# crate mesin/ (DEC-45). Aplikasi app/src-tauri punya workspace dan Cargo.lock sendiri (DEC-44), bukan anggota.
 [workspace]
 resolver = "3"
+members = [".", "mesin"]
 
 [workspace.package]
 version = "0.1.0"
@@ -54,6 +59,11 @@ zevrigo-crypto = { path = "../zevrigo/crates/crypto" }
 zevrigo-rpc = { path = "../zevrigo/crates/rpc" }
 zevrigo-wallet-core = { path = "../zevrigo/crates/wallet-core" }
 thiserror = "2.0.21"
+# DEC-45: crate mesin Zevrigo Node di repo ini (Q196a).
+zevrigo-node-mesin = { path = "mesin" }
+# DEC-45: serde untuk tipe keadaan mesin; versi dan fitur sama dengan repo inti dan wallet MOD-15, paket sudah ada di
+# Cargo.lock (lewat MOD-08), tanpa paket baru.
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 # DEC-10 bagian 4: hanya MOD-09 wallet-core (BIP39 dan BIP32); `sha2` juga MOD-14 explorer (hash CSP, TSK-M38).
 # Seri digest 0.10, sama dengan k256.
 sha2 = { version = "0.10.9", default-features = false }

@@ -12,7 +12,7 @@ on:
     branches: ["main"]
     tags: ["zevrigo-demo-gui"]
     # Hanya untuk main; GitHub tidak memeriksa paths saat tag di-push.
-    paths: ["app/**", ".github/workflows/rilis-node-app.yml"]
+    paths: ["app/**", "mesin/**", ".github/workflows/rilis-node-app.yml"]
   workflow_dispatch:
 
 permissions:

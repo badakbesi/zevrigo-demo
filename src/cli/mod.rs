@@ -21,6 +21,8 @@ pub const USAGE: &str = concat!(
     "                      [--jumlah <ZVRG>] [--batas-harian <n>] [--fee-rate <n>] [--trust-proxy-host <nama>]\n",
     "                      [--allow-origin <origin>]...\n",
     "  zevrigo-demo web --web-dir <dir> [--http-bind <ip>] [--http-port <port>]\n",
+    "  zevrigo-demo pengendali --datadir <dir> --token-sha256 <berkas> [--http-bind <ip>] [--http-port <port>]\n",
+    "                      [--rate <n>] [--trust-proxy-host <nama>] [--nyalakan-node]\n",
     "  zevrigo-demo --help | --version\n",
     "\n",
     "Mode:\n",
@@ -35,6 +37,11 @@ pub const USAGE: &str = concat!(
     "                      kiriman per hari UTC; GET/POST /api/v1/faucet dengan badan {\"address\": \"rzvrg1...\"}\n",
     "  web                 situs statis (blog, TSK-M64): hasil next build static export di --web-dir, hanya GET dan\n",
     "                      HEAD, kebijakan keamanan konten dengan hash skrip inline, tanpa kuki dan tanpa log pengunjung\n",
+    "  pengendali          pengendali jarak jauh Zevrigo Node (DEC-45): menjalankan node --seed-resmi dan penambang sendiri\n",
+    "                      (program zevrigo-node dan zevrigo-miner di samping program ini) dan menerima perintah\n",
+    "                      JSON-RPC 2.0 lewat POST bertoken (Authorization: Bearer <token>): info, keadaan_node,\n",
+    "                      keadaan_tambang, log_terbaru, muat_pengaturan, simpan_pengaturan, periksa_alamat,\n",
+    "                      nyalakan_node, hentikan_node, mulai_tambang, berhenti_tambang\n",
     "  daftar              belum tersedia (TSK-M55)\n",
     "\n",
     "Opsi mode rpc:\n",
@@ -73,6 +80,17 @@ pub const USAGE: &str = concat!(
     "  --allow-origin <o>  origin peramban yang boleh memanggil faucet (CORS); boleh berulang (bawaan\n",
     "                      https://demo-explorer.zevrigo.online)\n",
     "\n",
+    "Opsi mode pengendali:\n",
+    "  --datadir <dir>     folder data node (wajib); juga pengaturan-zevrigo-node.json (alamat hadiah, jeda)\n",
+    "  --token-sha256 <b>  berkas berisi SHA-256 token akses dalam hex (wajib), misalnya keluaran sha256sum; dibaca ulang\n",
+    "                      setiap permintaan, jadi token bisa diganti tanpa memulai ulang\n",
+    "  --http-bind <ip>    alamat dengar (bawaan 127.0.0.1)\n",
+    "  --http-port <port>  port dengar (bawaan 28808; 0 = port bebas)\n",
+    "  --rate <n>          batas laju per pengunjung seperti mode rpc (bawaan 5; 0 = tanpa batas)\n",
+    "  --trust-proxy-host <nama>\n",
+    "                      seperti mode faucet: pengunjung dari kepala CF-Connecting-IP untuk koneksi dari proxy itu\n",
+    "  --nyalakan-node     menyalakan node saat program mulai\n",
+    "\n",
     "Setelah siap, alamat dengar dicetak ke stdout sebagai `http: http://<alamat>` (mode faucet juga\n",
     "`alamat faucet: <alamat>`). Log ditulis ke stderr tanpa alamat\n",
     "pengunjung, metode, atau parameter. Program berhenti bersih dengan Ctrl-C (SIGINT) atau SIGTERM.",
@@ -106,6 +124,13 @@ pub const DEFAULT_ORIGIN: &str = "https://demo-explorer.zevrigo.online";
 /// Port situs statis bawaan (blog, TSK-M64).
 pub const DEFAULT_WEB_PORT: u16 = 28_807;
 
+/// Port pengendali jarak jauh bawaan (DEC-45; 28806 dicadangkan untuk pendaftaran TSK-M55).
+pub const DEFAULT_PENGENDALI_PORT: u16 = 28_808;
+
+/// Batas laju bawaan pengendali (permintaan per detik per pengunjung): antarmuka menanyakan keadaan node, penambang, dan
+/// log sekali per detik.
+pub const DEFAULT_PENGENDALI_RATE: u32 = 5;
+
 /// Perintah hasil membaca argumen.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
@@ -121,6 +146,27 @@ pub enum Command {
     Faucet(FaucetConfig),
     /// Menyajikan situs statis (mode `web`).
     Web(WebConfig),
+    /// Pengendali jarak jauh node dan penambang (mode `pengendali`, DEC-45).
+    Pengendali(PengendaliConfig),
+}
+
+/// Konfigurasi mode `pengendali`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PengendaliConfig {
+    /// Folder data node dan pengaturan mesin.
+    pub datadir: PathBuf,
+    /// Berkas berisi SHA-256 token akses (hex).
+    pub token_file: PathBuf,
+    /// Alamat dengar.
+    pub http_bind: IpAddr,
+    /// Port dengar. `0` memilih port bebas.
+    pub http_port: u16,
+    /// Batas laju (permintaan per detik per pengunjung). `0` berarti tanpa batas.
+    pub rate: u32,
+    /// Nama host proxy tepercaya untuk kepala `CF-Connecting-IP`.
+    pub trust_proxy_host: Option<String>,
+    /// Menyalakan node saat program mulai.
+    pub nyalakan_node: bool,
 }
 
 /// Konfigurasi mode `web`.
@@ -280,6 +326,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Command, Ar
         "upacara" => parse_upacara(iter).map(Command::Upacara),
         "faucet" => parse_faucet(iter).map(Command::Faucet),
         "web" => parse_web(iter).map(Command::Web),
+        "pengendali" => parse_pengendali(iter).map(Command::Pengendali),
         "daftar" => Err(ArgError::NotYet("daftar")),
         "--help" | "-h" | "--version" => Err(ArgError::Exclusive),
         option if option.starts_with("--") => Err(ArgError::MissingMode),
@@ -575,6 +622,74 @@ fn parse_web(mut iter: impl Iterator<Item = String>) -> Result<WebConfig, ArgErr
         web_dir: web_dir.ok_or(ArgError::MissingOption("--web-dir"))?,
         http_bind: http_bind.unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         http_port: http_port.unwrap_or(DEFAULT_WEB_PORT),
+    })
+}
+
+/// Membaca opsi mode `pengendali`.
+fn parse_pengendali(mut iter: impl Iterator<Item = String>) -> Result<PengendaliConfig, ArgError> {
+    let mut datadir: Option<PathBuf> = None;
+    let mut token_file: Option<PathBuf> = None;
+    let mut http_bind: Option<IpAddr> = None;
+    let mut http_port: Option<u16> = None;
+    let mut rate: Option<u32> = None;
+    let mut trust_proxy_host: Option<String> = None;
+    let mut nyalakan_node = false;
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--datadir" => once(
+                &mut datadir,
+                PathBuf::from(value_of(&mut iter, "--datadir")?),
+                "--datadir",
+            )?,
+            "--token-sha256" => once(
+                &mut token_file,
+                PathBuf::from(value_of(&mut iter, "--token-sha256")?),
+                "--token-sha256",
+            )?,
+            "--http-bind" => {
+                let value = value_of(&mut iter, "--http-bind")?;
+                let address = value
+                    .parse::<IpAddr>()
+                    .map_err(|_| ArgError::InvalidBind(value.clone()))?;
+                once(&mut http_bind, address, "--http-bind")?;
+            }
+            "--http-port" => {
+                let value = value_of(&mut iter, "--http-port")?;
+                let port = value
+                    .parse::<u16>()
+                    .map_err(|_| ArgError::InvalidPort(value.clone()))?;
+                once(&mut http_port, port, "--http-port")?;
+            }
+            "--rate" => {
+                let value = value_of(&mut iter, "--rate")?;
+                let parsed = value
+                    .parse::<u32>()
+                    .map_err(|_| ArgError::InvalidRate(value.clone()))?;
+                once(&mut rate, parsed, "--rate")?;
+            }
+            "--trust-proxy-host" => once(
+                &mut trust_proxy_host,
+                value_of(&mut iter, "--trust-proxy-host")?,
+                "--trust-proxy-host",
+            )?,
+            "--nyalakan-node" => {
+                if nyalakan_node {
+                    return Err(ArgError::Duplicate("--nyalakan-node"));
+                }
+                nyalakan_node = true;
+            }
+            "--help" | "-h" | "--version" => return Err(ArgError::Exclusive),
+            _ => return Err(ArgError::Unknown(arg)),
+        }
+    }
+    Ok(PengendaliConfig {
+        datadir: datadir.ok_or(ArgError::MissingOption("--datadir"))?,
+        token_file: token_file.ok_or(ArgError::MissingOption("--token-sha256"))?,
+        http_bind: http_bind.unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+        http_port: http_port.unwrap_or(DEFAULT_PENGENDALI_PORT),
+        rate: rate.unwrap_or(DEFAULT_PENGENDALI_RATE),
+        trust_proxy_host,
+        nyalakan_node,
     })
 }
 
