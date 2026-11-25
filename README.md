@@ -50,7 +50,9 @@ memakainya). Token disimpan di luar repo, di VPS: `~/.zevrigo.env` dan `~/.zevri
 `demo-explorer.zevrigo.online` (lama `zevrigo.ratuaurion.store`) ke `localhost:28802`, seed P2P WebSocket
 `demo-seed-p2p.zevrigo.online` (lama `zevrigo-seed`) ke `localhost:28803`, gerbang RPC untuk wallet peserta (hanya metode aman,
 tanpa menambang) `demo-gerbang-rpc.zevrigo.online` (lama `zevrigo-rpc`) ke `localhost:28804`, dan faucet
-`demo-faucet.zevrigo.online` (lama `zevrigo-faucet`) ke `node-faucet:28805`.
+`demo-faucet.zevrigo.online` (lama `zevrigo-faucet`) ke `node-faucet:28805`. Pengendali jarak jauh Zevrigo Node untuk Android
+(layanan `demo-mobile-remote-vps`, mode `pengendali`, DEC-45) `demo-mobile-vps.zevrigo.online` ke `demo-mobile-remote-vps:28808`,
+dilindungi Cloudflare Access (service token) dan token pengendali.
 
 Jaringan demo berjalan di dua mesin (TSK-M65, DEC-38), dipilih dengan profile compose. Tanpa `COMPOSE_PROFILES` tidak ada
 layanan publik yang dinyalakan, sehingga seed dan tunnel tidak pernah hidup di dua tempat sekaligus:
