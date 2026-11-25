@@ -13,9 +13,14 @@
 //!   `--trust-proxy-host` ([`faucet_client_ip`]); alamat tidak disimpan dan tidak dicatat.
 //! - Perintah yang mengubah keadaan dicatat di log program dan di log mesin (`perintah jarak jauh: ...`), tanpa token.
 //! - Saat menerima SIGINT atau SIGTERM, server berhenti lalu penambang dan node dihentikan.
+//! - Penambang yang dinyalakan lewat perintah dicatat di [`BERKAS_LANJUT`] folder data sampai dihentikan lewat perintah
+//!   (`berhenti_tambang`, `hentikan_node`). Dengan `--nyalakan-node`, program yang dimulai ulang (misalnya sesudah VPS restart)
+//!   menyalakan penambang lagi dengan alamat dan jeda yang sama begitu node sinkron (RENCANA_T17 bagian 9, putaran 5).
+//! - `saldo`: jumlah koin alamat hadiah di ujung chain node sendiri, dipisah matang (bisa dibelanjakan di blok berikutnya)
+//!   dan belum matang (hadiah tambang sebelum 100 blok). Tanpa kunci wallet.
 
 use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -28,17 +33,21 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use zevrigo_node_mesin::{Mesin, Pengaturan, bin_sidecar, periksa_alamat};
+use zevrigo_primitives::{Amount, Network};
 use zevrigo_rpc::error::{
     INTERNAL_ERROR, INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR,
 };
+use zevrigo_rpc::{Hex32, RpcClient};
+use zevrigo_wallet_core::decode_address;
 
 use crate::cli::PengendaliConfig;
 use crate::faucet::faucet_client_ip;
 use crate::gateway::{DemoError, shutdown_signal};
 use crate::limit::{Limits, Rate, RateLimiter};
 
-/// Metode yang dilayani: kontrak `Backend` aplikasi Zevrigo Node tanpa urusan jendela, papan klip, dan tautan.
-pub const METODE_PENGENDALI: [&str; 11] = [
+/// Metode yang dilayani: kontrak `Backend` aplikasi Zevrigo Node tanpa urusan jendela, papan klip, dan tautan, ditambah
+/// `saldo` (Q198).
+pub const METODE_PENGENDALI: [&str; 12] = [
     "info",
     "keadaan_node",
     "keadaan_tambang",
@@ -50,6 +59,7 @@ pub const METODE_PENGENDALI: [&str; 11] = [
     "hentikan_node",
     "mulai_tambang",
     "berhenti_tambang",
+    "saldo",
 ];
 
 /// Metode yang mengubah keadaan; dicatat di log program dan log mesin.
@@ -90,6 +100,46 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Selang me-resolve ulang nama host proxy tepercaya.
 const RESOLVE_INTERVAL: Duration = Duration::from_secs(60);
+
+/// URL JSON-RPC node anak (bawaan regtest node).
+pub const RPC_NODE: &str = "http://127.0.0.1:28801";
+
+/// Berkas penanda penambangan di folder data: `{"alamat": ..., "jeda": ...}`.
+pub const BERKAS_LANJUT: &str = "tambang-lanjut.json";
+
+/// Batas waktu menunggu node sinkron sebelum penambang dilanjutkan sesudah mulai ulang.
+const TUNGGU_LANJUT: Duration = Duration::from_secs(3_600);
+
+/// Menyimpan penanda penambangan (berkas sementara lalu ganti nama).
+///
+/// # Errors
+///
+/// Galat I/O bila folder atau berkas tidak bisa ditulis.
+pub fn simpan_lanjut(folder: &Path, alamat: &str, jeda: u64) -> std::io::Result<()> {
+    std::fs::create_dir_all(folder)?;
+    let sementara = folder.join(format!("{BERKAS_LANJUT}.tmp"));
+    std::fs::write(
+        &sementara,
+        json!({"alamat": alamat.trim(), "jeda": jeda}).to_string(),
+    )?;
+    std::fs::rename(&sementara, folder.join(BERKAS_LANJUT))
+}
+
+/// Penanda penambangan `(alamat, jeda)`, atau `None` bila tidak ada atau rusak.
+#[must_use]
+pub fn baca_lanjut(folder: &Path) -> Option<(String, u64)> {
+    let teks = std::fs::read_to_string(folder.join(BERKAS_LANJUT)).ok()?;
+    let nilai: Value = serde_json::from_str(&teks).ok()?;
+    let alamat = nilai.get("alamat")?.as_str()?.to_owned();
+    let jeda = nilai.get("jeda")?.as_u64()?;
+    Some((alamat, jeda))
+}
+
+/// Menghapus penanda penambangan (tidak ada pun tidak apa-apa).
+pub fn hapus_lanjut(folder: &Path) {
+    // Berkas yang tidak ada bukan galat; galat lain hanya berarti penambang mungkin dilanjutkan sekali lagi.
+    let _ = std::fs::remove_file(folder.join(BERKAS_LANJUT));
+}
 
 /// SHA-256 dari isi berkas token: kata pertama berupa tepat 64 huruf hex (format keluaran `sha256sum`).
 #[must_use]
@@ -213,6 +263,8 @@ pub struct OpsiPengendali {
     pub trusted: Arc<RwLock<Vec<IpAddr>>>,
     /// Versi program node (jawaban `info`).
     pub versi_node: String,
+    /// URL JSON-RPC node anak (`saldo`), biasanya [`RPC_NODE`].
+    pub rpc_node: String,
 }
 
 /// Isi router.
@@ -223,6 +275,7 @@ struct App {
     gagal: Mutex<RateLimiter>,
     trusted: Arc<RwLock<Vec<IpAddr>>>,
     versi_node: String,
+    rpc_node: String,
     started: Instant,
 }
 
@@ -297,6 +350,7 @@ pub fn router(mesin: Arc<Mesin>, opsi: OpsiPengendali) -> Router {
         gagal: Mutex::new(RateLimiter::new(BATAS_GAGAL)),
         trusted: opsi.trusted,
         versi_node: opsi.versi_node,
+        rpc_node: opsi.rpc_node,
         started: Instant::now(),
     };
     Router::new().fallback(handle).with_state(Arc::new(app))
@@ -513,6 +567,7 @@ async fn hasil(app: &App, metode: &str, params: &Map<String, Value>) -> Hasil {
             Value::Null
         }
         "hentikan_node" => {
+            hapus_lanjut(app.mesin.folder());
             blocking(move || mesin.hentikan_node()).await?;
             Value::Null
         }
@@ -522,15 +577,21 @@ async fn hasil(app: &App, metode: &str, params: &Map<String, Value>) -> Hasil {
                 .get("jeda")
                 .and_then(Value::as_u64)
                 .ok_or_else(|| (INVALID_PARAMS, "jeda wajib berupa detik".to_owned()))?;
+            let alamat_lanjut = alamat.clone();
             blocking(move || mesin.mulai_tambang(&alamat, jeda))
                 .await?
                 .map_err(ditolak)?;
+            if let Err(error) = simpan_lanjut(app.mesin.folder(), &alamat_lanjut, jeda) {
+                tracing::warn!(%error, "penanda penambangan gagal disimpan");
+            }
             Value::Null
         }
         "berhenti_tambang" => {
+            hapus_lanjut(app.mesin.folder());
             blocking(move || mesin.hentikan_tambang()).await?;
             Value::Null
         }
+        "saldo" => saldo(&app.rpc_node, &param_teks(params, "alamat")?).await?,
         _ => {
             return Err((
                 METHOD_NOT_FOUND,
@@ -539,6 +600,71 @@ async fn hasil(app: &App, metode: &str, params: &Map<String, Value>) -> Hasil {
         }
     };
     Ok(nilai)
+}
+
+/// `saldo`: UTXO alamat regtest `alamat` di ujung chain node `rpc_node`, dijumlahkan matang (boleh dibelanjakan di blok
+/// berikutnya) dan belum matang. Jumlah dalam ZVRG desimal.
+async fn saldo(rpc_node: &str, alamat: &str) -> Hasil {
+    let (_, payload) = decode_address(Network::Regtest, alamat.trim()).map_err(|_| {
+        (
+            INVALID_PARAMS,
+            "alamat bukan alamat jaringan demo (rzvrg1...) yang sah".to_owned(),
+        )
+    })?;
+    let klien = RpcClient::new(rpc_node).map_err(|e| (INTERNAL_ERROR, e.to_string()))?;
+    let info = klien
+        .get_chain_info()
+        .await
+        .map_err(|e| ditolak(format!("node tidak menjawab: {e}")))?;
+    let daftar = klien
+        .scan_utxos(&[Hex32::new(payload)])
+        .await
+        .map_err(|e| ditolak(format!("node tidak menjawab: {e}")))?;
+    let berikut = info.height.saturating_add(1);
+    let (mut matang, mut belum) = (Amount::ZERO, Amount::ZERO);
+    for utxo in &daftar {
+        let jumlah = utxo.amount.amount();
+        let slot = if utxo.spendable_at <= berikut {
+            &mut matang
+        } else {
+            &mut belum
+        };
+        *slot = slot
+            .checked_add(jumlah)
+            .ok_or_else(|| (INTERNAL_ERROR, "jumlah saldo meluap".to_owned()))?;
+    }
+    Ok(json!({
+        "tinggi": info.height,
+        "matang": matang.to_zvrg_string(),
+        "belumMatang": belum.to_zvrg_string(),
+        "jumlahOutput": daftar.len(),
+    }))
+}
+
+/// Menyalakan lagi penambang dari [`BERKAS_LANJUT`] begitu node sinkron (paling lama [`TUNGGU_LANJUT`]).
+async fn lanjutkan_tambang(mesin: Arc<Mesin>, alamat: String, jeda: u64) {
+    let akhir = Instant::now() + TUNGGU_LANJUT;
+    while Instant::now() < akhir {
+        if mesin.keadaan_tambang().status() != "berhenti" {
+            return;
+        }
+        if mesin.keadaan_node().status() == "sinkron" {
+            let m = Arc::clone(&mesin);
+            let a = alamat.clone();
+            match blocking(move || m.mulai_tambang(&a, jeda)).await {
+                Ok(Ok(())) => {
+                    tracing::info!(jeda, "penambang dilanjutkan sesudah mulai ulang");
+                    mesin.catat("aplikasi", "penambang dilanjutkan sesudah mulai ulang");
+                    return;
+                }
+                Ok(Err(error)) | Err((_, error)) => {
+                    tracing::warn!(%error, "penambang belum bisa dilanjutkan");
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+    tracing::warn!("penambang tidak dilanjutkan: node tidak sinkron dalam batas waktu");
 }
 
 /// Mengganti daftar alamat proxy tepercaya.
@@ -572,7 +698,13 @@ async fn serve(config: &PengendaliConfig) -> Result<(), DemoError> {
     if config.nyalakan_node {
         let m = Arc::clone(&mesin);
         match blocking(move || m.nyalakan_node()).await {
-            Ok(Ok(())) => tracing::info!("node dinyalakan saat mulai"),
+            Ok(Ok(())) => {
+                tracing::info!("node dinyalakan saat mulai");
+                if let Some((alamat, jeda)) = baca_lanjut(&config.datadir) {
+                    tracing::info!(jeda, "penambang akan dilanjutkan begitu node sinkron");
+                    tokio::spawn(lanjutkan_tambang(Arc::clone(&mesin), alamat, jeda));
+                }
+            }
             Ok(Err(error)) | Err((_, error)) => {
                 tracing::warn!(%error, "node tidak bisa dinyalakan saat mulai");
             }
@@ -608,6 +740,7 @@ async fn serve(config: &PengendaliConfig) -> Result<(), DemoError> {
             limits: Limits::from_rate(config.rate),
             trusted,
             versi_node,
+            rpc_node: RPC_NODE.to_owned(),
         },
     );
     let served = axum::serve(

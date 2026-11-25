@@ -1,0 +1,325 @@
+#!/usr/bin/env bash
+# demo-zevrigo-kendali - skrip bantu Zevrigo Node di VPS (DEC-45, DEC-46, RENCANA_T17 bagian 9.3; nama dari pencipta 25 November
+# 2026). Dipanggil aplikasi Zevrigo Node Android lewat SSH dengan perintah tetap di bawah. Sesudah pemasangan, pengguna SSH
+# (bukan root) boleh menjalankan skrip ini lewat sudo tanpa password (/etc/sudoers.d/demo-zevrigo), hanya skrip ini.
+#
+#   pasang [--pengguna-ssh <nama>] [--token-sha256 <hex>] [--sha256 <hex>]
+#                         dari folder paket demo-zevrigo-vps yang sudah diekstrak: pasang baru, atau perbarui bila sudah ada
+#                         (versi lama disimpan untuk kembali; gagal menjawab dalam 90 detik -> kembali ke versi lama)
+#   perbarui <sha256>     unduh paket resmi terbaru dari GitHub, cocokkan SHA-256 dengan <sha256> dan SHA256SUMS.txt,
+#                         lalu pasang (seperti di atas)
+#   token <sha256>        ganti SHA-256 token pengendali (token lama langsung tidak berlaku)
+#   status                keadaan VPS dan layanan sebagai satu baris JSON
+#   node-publik nyala <ip> [port] | node-publik mati
+#   batas-cpu <10-100>    batas CPU layanan (persen satu CPU; bawaan 50)
+#   amankan-ssh           matikan login password SSH (hanya bila pengguna SSH sudah punya kunci)
+#   cabut-kunci <kunci>   hapus kunci publik SSH (bagian base64) dari authorized_keys pengguna SSH
+#   restart-vps           restart VPS dalam 5 detik
+#   copot [--hapus-data]  hentikan dan hapus layanan; data chain disimpan kecuali --hapus-data
+#
+# Keluar 0 bila berhasil; selain itu baris terakhir stderr "galat: ...". Hanya untuk jaringan demo regtest.
+set -euo pipefail
+umask 022
+export LC_ALL=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+NAMA=demo-zevrigo
+LAYANAN=demo-zevrigo-node
+PROGRAM=/opt/demo-zevrigo
+DATA=/var/lib/demo-zevrigo
+KONFIG=/etc/demo-zevrigo
+SUDOERS=/etc/sudoers.d/demo-zevrigo
+SSHD=/etc/ssh/sshd_config.d/00-demo-zevrigo.conf
+TAUTAN=/usr/local/sbin/demo-zevrigo-kendali
+RILIS=https://github.com/badakbesi/zevrigo-demo/releases/download/demo-zevrigo-vps
+PAKET=demo-zevrigo-vps-linux-x86_64.tar.gz
+PORT_PENGENDALI=28808
+
+galat() { echo "galat: $*" >&2; exit 1; }
+hex64() { [[ "${1:-}" =~ ^[0-9a-f]{64}$ ]]; }
+butuh_root() { [ "$(id -u)" = 0 ] || galat "jalankan dengan sudo (atau sebagai root)"; }
+pengguna_ssh() {
+  # Pengguna yang memanggil lewat sudo, atau root.
+  local u="${SUDO_USER:-root}"
+  [[ "$u" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || galat "nama pengguna SSH tidak sah"
+  echo "$u"
+}
+rumah() { getent passwd "$1" | cut -d: -f6; }
+
+# Menunggu pengendali menjawab di 127.0.0.1:28808 (jawaban HTTP apa pun; tanpa token dijawab 401).
+tunggu_pengendali() {
+  local batas=$(( $(date +%s) + ${1:-90} ))
+  while [ "$(date +%s)" -lt "$batas" ]; do
+    if (exec 3<>/dev/tcp/127.0.0.1/$PORT_PENGENDALI && printf 'POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}' >&3 \
+        && head -n 1 <&3 | grep -q '^HTTP/1.1 401') 2>/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+periksa_sistem() {
+  [ "$(uname -m)" = x86_64 ] || galat "VPS bukan x86_64 ($(uname -m)); paket hanya untuk Linux x86_64"
+  command -v systemctl > /dev/null && [ -d /run/systemd/system ] || galat "systemd tidak berjalan di VPS ini"
+  local id="" versi=""
+  if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    id=$(. /etc/os-release && echo "${ID:-}"); versi=$(. /etc/os-release && echo "${VERSION_ID:-}")
+  fi
+  case "$id" in
+    ubuntu) [ "${versi%%.*}" -ge 22 ] 2>/dev/null || galat "Ubuntu $versi terlalu lama (butuh 22.04 atau lebih baru)" ;;
+    debian) [ "${versi%%.*}" -ge 12 ] 2>/dev/null || galat "Debian $versi terlalu lama (butuh 12 atau lebih baru)" ;;
+    *) galat "sistem $id $versi belum didukung (butuh Ubuntu 22.04+ atau Debian 12+)" ;;
+  esac
+  # Node membaca tinggi jaringan dari gerbang RPC publik lewat HTTPS (daftar CA sistem); tanpa itu node tidak pernah Sinkron.
+  [ -s /etc/ssl/certs/ca-certificates.crt ] || galat "daftar sertifikat CA tidak ada; pasang paket ca-certificates dulu"
+}
+
+cmd_pasang() {
+  butuh_root
+  local ssh_user="" token="" sha=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --pengguna-ssh) ssh_user="${2:-}"; shift 2 ;;
+      --token-sha256) token="${2:-}"; shift 2 ;;
+      --sha256) sha="${2:-}"; shift 2 ;;
+      *) galat "opsi pasang tidak dikenal: $1" ;;
+    esac
+  done
+  [ -z "$ssh_user" ] || [[ "$ssh_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || galat "nama --pengguna-ssh tidak sah"
+  [ -z "$ssh_user" ] || getent passwd "$ssh_user" > /dev/null || galat "pengguna $ssh_user tidak ada"
+  [ -z "$token" ] || hex64 "$token" || galat "--token-sha256 harus 64 huruf hex kecil"
+  [ -z "$sha" ] || hex64 "$sha" || galat "--sha256 harus 64 huruf hex kecil"
+  periksa_sistem
+  local asal; asal=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+  case "$asal" in "$PROGRAM"/*) galat "pasang harus dijalankan dari folder paket yang diekstrak, bukan dari $PROGRAM" ;; esac
+  local b
+  for b in zevrigo-node zevrigo-miner zevrigo-cli zevrigo-demo demo-zevrigo-kendali demo-zevrigo-node.service VERSI; do
+    [ -f "$asal/$b" ] || galat "paket tidak lengkap: $b tidak ada"
+  done
+  "$asal/zevrigo-demo" --help | grep -q 'zevrigo-demo pengendali' || galat "zevrigo-demo di paket tanpa mode pengendali"
+  local baru=0; [ -e "$PROGRAM/sekarang" ] || baru=1
+  [ "$baru" = 0 ] || [ -n "$token" ] || [ -f "$DATA/token-pengendali.sha256" ] || galat "pemasangan baru butuh --token-sha256"
+  [ "$baru" = 0 ] || [ -n "$ssh_user" ] || [ "${SUDO_USER:-root}" = root ] || ssh_user="$SUDO_USER"
+
+  # Pengguna sistem dan folder.
+  if ! getent passwd "$NAMA" > /dev/null; then
+    useradd --system --user-group --home-dir "$DATA" --no-create-home --shell /usr/sbin/nologin "$NAMA"
+  fi
+  install -d -m 0755 -o root -g root "$PROGRAM" "$KONFIG"
+  install -d -m 0750 -o "$NAMA" -g "$NAMA" "$DATA"
+  if [ -n "$token" ]; then
+    printf '%s  -\n' "$token" > "$DATA/token-pengendali.sha256"
+    chown "$NAMA:$NAMA" "$DATA/token-pengendali.sha256"; chmod 0600 "$DATA/token-pengendali.sha256"
+  fi
+  [ -f "$KONFIG/node.env" ] || { echo "# Mode node publik (demo-zevrigo-kendali node-publik). Kosong = rekan biasa." > "$KONFIG/node.env"; chmod 0644 "$KONFIG/node.env"; }
+
+  # Versi baru di folder sendiri; tautan sekarang/sebelumnya diganti secara atomik.
+  local versi; versi="rilis-$(date -u +%Y%m%d%H%M%S)"
+  install -d -m 0755 "$PROGRAM/$versi"
+  for b in zevrigo-node zevrigo-miner zevrigo-cli zevrigo-demo demo-zevrigo-kendali; do install -m 0755 "$asal/$b" "$PROGRAM/$versi/$b"; done
+  for b in demo-zevrigo-node.service VERSI README.md LICENSE-MIT LICENSE-APACHE; do
+    if [ -f "$asal/$b" ]; then install -m 0644 "$asal/$b" "$PROGRAM/$versi/$b"; fi
+  done
+  [ -z "$sha" ] || echo "$sha" > "$PROGRAM/$versi/SHA256-PAKET"
+  local lama=""; [ "$baru" = 1 ] || lama=$(readlink -f "$PROGRAM/sekarang")
+  ln -sfn "$versi" "$PROGRAM/sekarang.tmp" && mv -Tf "$PROGRAM/sekarang.tmp" "$PROGRAM/sekarang"
+  [ -z "$lama" ] || { ln -sfn "$(basename "$lama")" "$PROGRAM/sebelumnya.tmp" && mv -Tf "$PROGRAM/sebelumnya.tmp" "$PROGRAM/sebelumnya"; }
+  ln -sfn "$PROGRAM/sekarang/demo-zevrigo-kendali" "$TAUTAN"
+
+  # Layanan systemd dan aturan sudo.
+  install -m 0644 "$PROGRAM/sekarang/demo-zevrigo-node.service" "/etc/systemd/system/$LAYANAN.service"
+  if [ -n "$ssh_user" ] && [ "$ssh_user" != root ]; then
+    echo "$ssh_user ALL=(root) NOPASSWD: $TAUTAN" > "$SUDOERS.tmp"
+    chmod 0440 "$SUDOERS.tmp"
+    visudo -cqf "$SUDOERS.tmp" || { rm -f "$SUDOERS.tmp"; galat "aturan sudo tidak sah"; }
+    mv -f "$SUDOERS.tmp" "$SUDOERS"
+  fi
+  systemctl daemon-reload
+  systemctl enable "$LAYANAN" > /dev/null 2>&1
+  systemctl restart "$LAYANAN"
+  if ! tunggu_pengendali 90; then
+    if [ -n "$lama" ]; then
+      ln -sfn "$(basename "$lama")" "$PROGRAM/sekarang.tmp" && mv -Tf "$PROGRAM/sekarang.tmp" "$PROGRAM/sekarang"
+      ln -sfn "$PROGRAM/sekarang/demo-zevrigo-kendali" "$TAUTAN"
+      install -m 0644 "$PROGRAM/sekarang/demo-zevrigo-node.service" "/etc/systemd/system/$LAYANAN.service"
+      systemctl daemon-reload; systemctl restart "$LAYANAN"
+      rm -rf "${PROGRAM:?}/$versi"
+      galat "versi baru tidak menjawab dalam 90 detik; kembali ke versi lama $(basename "$lama")"
+    fi
+    journalctl -u "$LAYANAN" -n 20 --no-pager >&2 || true
+    galat "pengendali tidak menjawab dalam 90 detik sesudah dipasang"
+  fi
+  # Simpan dua versi terakhir saja.
+  local d keep_a keep_b
+  keep_a=$(basename "$(readlink -f "$PROGRAM/sekarang")"); keep_b=$(basename "$(readlink -f "$PROGRAM/sebelumnya" 2>/dev/null || echo -)")
+  for d in "$PROGRAM"/rilis-*; do
+    [ -d "$d" ] || continue
+    case "$(basename "$d")" in "$keep_a"|"$keep_b") ;; *) rm -rf "$d" ;; esac
+  done
+  echo "terpasang: $versi ($(head -n 1 "$PROGRAM/sekarang/VERSI"))$([ -n "$lama" ] && echo ", sebelumnya $(basename "$lama")")"
+}
+
+cmd_perbarui() {
+  butuh_root
+  local sha="${1:-}"
+  hex64 "$sha" || galat "perbarui butuh SHA-256 paket (64 huruf hex kecil)"
+  if command -v curl > /dev/null; then unduh() { curl -fsSL --retry 3 --connect-timeout 30 -o "$2" "$1"; }
+  elif command -v wget > /dev/null; then unduh() { wget -q -T 30 -t 3 -O "$2" "$1"; }
+  else galat "curl atau wget tidak ada di VPS"; fi
+  local kerja; kerja=$(mktemp -d /tmp/demo-zevrigo-perbarui.XXXXXX)
+  trap 'rm -rf "$kerja"' EXIT
+  unduh "$RILIS/SHA256SUMS.txt" "$kerja/SHA256SUMS.txt" || galat "SHA256SUMS.txt tidak bisa diunduh"
+  grep -qxF "$sha  $PAKET" "$kerja/SHA256SUMS.txt" || galat "SHA-256 yang diminta tidak cocok dengan SHA256SUMS.txt rilis resmi"
+  unduh "$RILIS/$PAKET" "$kerja/$PAKET" || galat "paket tidak bisa diunduh"
+  [ "$(sha256sum "$kerja/$PAKET" | cut -d' ' -f1)" = "$sha" ] || galat "SHA-256 paket yang diunduh tidak cocok"
+  tar -xzf "$kerja/$PAKET" -C "$kerja" --no-same-owner
+  [ -x "$kerja/demo-zevrigo-vps/demo-zevrigo-kendali" ] || galat "isi paket tidak dikenali"
+  "$kerja/demo-zevrigo-vps/demo-zevrigo-kendali" pasang --sha256 "$sha"
+}
+
+cmd_token() {
+  butuh_root
+  hex64 "${1:-}" || galat "token butuh SHA-256 token (64 huruf hex kecil)"
+  [ -d "$DATA" ] || galat "Zevrigo Node belum terpasang"
+  printf '%s  -\n' "$1" > "$DATA/token-pengendali.sha256.tmp"
+  chown "$NAMA:$NAMA" "$DATA/token-pengendali.sha256.tmp"; chmod 0600 "$DATA/token-pengendali.sha256.tmp"
+  mv -f "$DATA/token-pengendali.sha256.tmp" "$DATA/token-pengendali.sha256"
+  echo "token: diganti"
+}
+
+json_teks() { local s="${1//\\/\\\\}"; s="${s//\"/\\\"}"; printf '"%s"' "$s"; }
+
+cmd_status() {
+  local versi="" aktif sejak cpu muatan ram_total ram_ada disk_total disk_bebas uptime publik kuota sshpw
+  if [ -f "$PROGRAM/sekarang/VERSI" ]; then versi=$(head -n 1 "$PROGRAM/sekarang/VERSI"); fi
+  aktif=$(systemctl is-active "$LAYANAN" 2>/dev/null || true)
+  sejak=$(systemctl show -p ActiveEnterTimestamp --value "$LAYANAN" 2>/dev/null || true)
+  cpu=$(nproc); muatan=$(cut -d' ' -f1 /proc/loadavg)
+  ram_total=$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo); ram_ada=$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo)
+  local tempat=/; if [ -d "$DATA" ]; then tempat="$DATA"; fi
+  read -r disk_total disk_bebas < <(df -Pm "$tempat" | awk 'NR==2{print $2, $4}')
+  uptime=$(cut -d' ' -f1 /proc/uptime); uptime=${uptime%%.*}
+  publik=$(sed -n 's/^ZVRG_P2P_PUBLIK=//p' "$KONFIG/node.env" 2>/dev/null || true)
+  kuota=$(systemctl show -p CPUQuotaPerSecUSec --value "$LAYANAN" 2>/dev/null || true)
+  sshpw=$( { sshd -T 2>/dev/null || /usr/sbin/sshd -T 2>/dev/null || true; } | awk '$1=="passwordauthentication"{print $2}')
+  printf '{"versi":%s,"layanan":%s,"aktifSejak":%s,"cpu":%s,"muatan1m":%s,"ramTotalMb":%s,"ramTersediaMb":%s,"diskTotalMb":%s,"diskBebasMb":%s,"uptimeDetik":%s,"nodePublik":%s,"kuotaCpu":%s,"loginPassword":%s}\n' \
+    "$(json_teks "$versi")" "$(json_teks "$aktif")" "$(json_teks "$sejak")" "$cpu" "$(json_teks "$muatan")" \
+    "${ram_total:-0}" "${ram_ada:-0}" "${disk_total:-0}" "${disk_bebas:-0}" "${uptime:-0}" "$(json_teks "$publik")" \
+    "$(json_teks "$kuota")" "$(json_teks "${sshpw:-}")"
+}
+
+ufw_aktif() { command -v ufw > /dev/null && ufw status 2>/dev/null | grep -q '^Status: active'; }
+
+cmd_node_publik() {
+  butuh_root
+  [ -f "/etc/systemd/system/$LAYANAN.service" ] || galat "Zevrigo Node belum terpasang"
+  local lama_port; lama_port=$(sed -n 's|^ZVRG_P2P_PUBLIK=.*/tcp/||p' "$KONFIG/node.env" 2>/dev/null || true)
+  case "${1:-}" in
+    nyala)
+      local ip="${2:-}" port="${3:-28800}" alamat
+      [[ "$port" =~ ^[0-9]{4,5}$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || galat "port harus 1024 sampai 65535"
+      if [[ "$ip" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+        local o; for o in "${BASH_REMATCH[@]:1}"; do [ "$o" -le 255 ] || galat "IP tidak sah"; done
+        alamat="/ip4/$ip/tcp/$port"
+      elif [[ "$ip" =~ ^[0-9a-fA-F:]{2,39}$ ]] && [[ "$ip" == *:* ]]; then
+        alamat="/ip6/$ip/tcp/$port"
+      else
+        galat "IP publik tidak sah: $ip"
+      fi
+      printf '# Mode node publik (demo-zevrigo-kendali node-publik).\nZVRG_P2P_PUBLIK=%s\n' "$alamat" > "$KONFIG/node.env"
+      if ufw_aktif; then
+        [ -z "$lama_port" ] || [ "$lama_port" = "$port" ] || ufw delete allow "$lama_port/tcp" > /dev/null 2>&1 || true
+        ufw allow "$port/tcp" comment demo-zevrigo > /dev/null
+        echo "ufw: port $port/tcp diizinkan"
+      fi
+      systemctl restart "$LAYANAN"
+      echo "node publik: $alamat (izinkan juga port $port/tcp di firewall panel penyedia VPS bila ada)" ;;
+    mati)
+      echo "# Mode node publik (demo-zevrigo-kendali node-publik). Kosong = rekan biasa." > "$KONFIG/node.env"
+      if ufw_aktif && [ -n "$lama_port" ]; then ufw delete allow "$lama_port/tcp" > /dev/null 2>&1 || true; echo "ufw: port $lama_port/tcp ditutup"; fi
+      systemctl restart "$LAYANAN"
+      echo "node publik: mati" ;;
+    *) galat "pemakaian: node-publik nyala <ip> [port] | node-publik mati" ;;
+  esac
+}
+
+cmd_batas_cpu() {
+  butuh_root
+  local n="${1:-}"
+  [[ "$n" =~ ^[0-9]{2,3}$ ]] && [ "$n" -ge 10 ] && [ "$n" -le 100 ] || galat "batas CPU harus 10 sampai 100 (persen satu CPU)"
+  [ -f "/etc/systemd/system/$LAYANAN.service" ] || galat "Zevrigo Node belum terpasang"
+  systemctl set-property "$LAYANAN" "CPUQuota=${n}%"
+  echo "batas CPU: ${n}%"
+}
+
+cmd_amankan_ssh() {
+  butuh_root
+  local u ak; u=$(pengguna_ssh); ak="$(rumah "$u")/.ssh/authorized_keys"
+  [ -s "$ak" ] && grep -qE '^(ssh-ed25519|ecdsa-sha2-|ssh-rsa) ' "$ak" || galat "pengguna $u belum punya kunci SSH di $ak; login password tidak dimatikan"
+  [ -d /etc/ssh/sshd_config.d ] || galat "/etc/ssh/sshd_config.d tidak ada"
+  grep -qE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config || galat "sshd_config tidak memuat sshd_config.d; tidak diubah"
+  printf '# Zevrigo Node (demo-zevrigo-kendali amankan-ssh): login hanya dengan kunci.\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n' > "$SSHD.tmp"
+  chmod 0644 "$SSHD.tmp"; mv -f "$SSHD.tmp" "$SSHD"
+  if ! sshd -t 2>/dev/null && ! /usr/sbin/sshd -t 2>/dev/null; then rm -f "$SSHD"; galat "konfigurasi sshd tidak sah; dikembalikan"; fi
+  # sshd membaca konfigurasi lagi untuk setiap sambungan baru; reload hanya mempercepat (Ubuntu 24.04: ssh.socket).
+  systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+  local nilai; nilai=$( { sshd -T 2>/dev/null || /usr/sbin/sshd -T 2>/dev/null || true; } | awk '$1=="passwordauthentication"{print $2}')
+  [ "$nilai" = no ] || galat "login password masih menyala (passwordauthentication $nilai)"
+  echo "login password SSH: mati (masuk dengan kunci; bila HP hilang: konsol web penyedia VPS)"
+}
+
+cmd_cabut_kunci() {
+  butuh_root
+  local blob="${1:-}" u ak
+  [[ "$blob" =~ ^[A-Za-z0-9+/]{40,}={0,2}$ ]] || galat "kunci publik (bagian base64) tidak sah"
+  u=$(pengguna_ssh); ak="$(rumah "$u")/.ssh/authorized_keys"
+  [ -f "$ak" ] && grep -qF " $blob" "$ak" || galat "kunci tidak ada di $ak"
+  grep -vF " $blob" "$ak" > "$ak.demo-zevrigo.tmp" || true
+  chown --reference="$ak" "$ak.demo-zevrigo.tmp"; chmod --reference="$ak" "$ak.demo-zevrigo.tmp"
+  mv -f "$ak.demo-zevrigo.tmp" "$ak"
+  echo "kunci: dicabut dari $ak"
+}
+
+cmd_restart_vps() {
+  butuh_root
+  systemd-run --quiet --on-active=5 /bin/systemctl reboot
+  echo "VPS restart dalam 5 detik"
+}
+
+cmd_copot() {
+  butuh_root
+  local hapus=0
+  case "${1:-}" in "") ;; --hapus-data) hapus=1 ;; *) galat "pemakaian: copot [--hapus-data]" ;; esac
+  local port; port=$(sed -n 's|^ZVRG_P2P_PUBLIK=.*/tcp/||p' "$KONFIG/node.env" 2>/dev/null || true)
+  systemctl disable --now "$LAYANAN" > /dev/null 2>&1 || true
+  rm -f "/etc/systemd/system/$LAYANAN.service"
+  rm -rf "/etc/systemd/system.control/$LAYANAN.service.d"
+  systemctl daemon-reload
+  if ufw_aktif && [ -n "$port" ]; then ufw delete allow "$port/tcp" > /dev/null 2>&1 || true; fi
+  rm -f "$TAUTAN" "$SUDOERS"
+  rm -rf "${PROGRAM:?}" "${KONFIG:?}"
+  if [ "$hapus" = 1 ]; then
+    rm -rf "${DATA:?}"
+    userdel "$NAMA" 2>/dev/null || true
+    echo "dicopot: layanan, program, dan data dihapus"
+  else
+    echo "dicopot: layanan dan program dihapus; data chain tetap di $DATA (pasang lagi memakainya)"
+  fi
+  [ ! -f "$SSHD" ] || echo "catatan: login password SSH tetap mati ($SSHD)"
+}
+
+perintah="${1:-}"; shift || true
+case "$perintah" in
+  pasang) cmd_pasang "$@" ;;
+  perbarui) cmd_perbarui "$@" ;;
+  token) cmd_token "$@" ;;
+  status) cmd_status ;;
+  node-publik) cmd_node_publik "$@" ;;
+  batas-cpu) cmd_batas_cpu "$@" ;;
+  amankan-ssh) cmd_amankan_ssh ;;
+  cabut-kunci) cmd_cabut_kunci "$@" ;;
+  restart-vps) cmd_restart_vps ;;
+  copot) cmd_copot "$@" ;;
+  *) galat "perintah tidak dikenal: ${perintah:-(kosong)}; lihat kepala skrip" ;;
+esac

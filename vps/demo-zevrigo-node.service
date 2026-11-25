@@ -1,0 +1,38 @@
+# Zevrigo Node jaringan demo regtest di VPS (DEC-45, DEC-46, RENCANA_T17 bagian 9.3). Dipasang demo-zevrigo-kendali pasang.
+# Satu layanan: zevrigo-demo mode pengendali (127.0.0.1:28808, bertoken) yang menjalankan node --seed-resmi dan penambang
+# sebagai proses anak. Semua port hanya 127.0.0.1, kecuali mode node publik (/etc/demo-zevrigo/node.env). Batas CPU berlaku
+# untuk seluruh layanan (node + penambang; penambang regtest ringan); ubah dengan demo-zevrigo-kendali batas-cpu.
+[Unit]
+Description=Zevrigo Node jaringan demo (pengendali, node, penambang)
+Documentation=https://github.com/badakbesi/zevrigo-demo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=demo-zevrigo
+Group=demo-zevrigo
+EnvironmentFile=-/etc/demo-zevrigo/node.env
+Environment=NO_COLOR=1
+ExecStart=/opt/demo-zevrigo/sekarang/zevrigo-demo pengendali --datadir /var/lib/demo-zevrigo --token-sha256 /var/lib/demo-zevrigo/token-pengendali.sha256 --nyalakan-node
+# SIGTERM hanya ke pengendali; pengendali menghentikan penambang lalu node (node sampai 30 detik).
+KillMode=mixed
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+CPUQuota=50%
+MemoryMax=512M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/demo-zevrigo
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -529,7 +529,9 @@ fn parses_pengendali_mode() {
         "--token-sha256",
         "--nyalakan-node",
         "mulai_tambang",
+        "saldo",
         "28808",
+        "ZVRG_P2P_PUBLIK",
     ] {
         assert!(USAGE.contains(word), "{word}");
     }

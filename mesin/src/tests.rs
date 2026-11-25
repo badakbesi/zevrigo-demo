@@ -6,8 +6,9 @@ use zevrigo_primitives::{Network, OutputKind};
 use zevrigo_wallet_core::encode_address;
 
 use super::{
-    BarisLog, JEDA_SAH, MAKS_LOG, Mesin, PenampungLog, Pengaturan, bersihkan_baris,
+    BarisLog, JEDA_SAH, MAKS_LOG, Mesin, PenampungLog, Pengaturan, argumen_node, bersihkan_baris,
     blok_dari_baris, periksa_alamat, rekan_dari_baris, status_node, tautan_resmi, tingkat_baris,
+    urai_publik,
 };
 
 #[test]
@@ -139,6 +140,53 @@ fn node_status_follows_observations() {
     );
     assert_eq!(status_node(false, true, false, None, None, 0), "menyambung");
     assert_eq!(status_node(false, false, true, None, None, 0), "galat");
+}
+
+#[test]
+fn node_arguments_and_public_mode() {
+    let folder = PathBuf::from("/var/lib/demo-zevrigo");
+    let dasar = [
+        "--regtest",
+        "--datadir",
+        "/var/lib/demo-zevrigo",
+        "--seed-resmi",
+    ];
+    let teks = |a: Vec<std::ffi::OsString>| -> Vec<String> {
+        a.into_iter().map(|x| x.into_string().unwrap()).collect()
+    };
+    assert_eq!(teks(argumen_node(&folder, None)), dasar);
+    assert_eq!(
+        teks(argumen_node(&folder, Some("/ip4/203.0.113.7/tcp/28800"))),
+        [
+            &dasar[..],
+            &[
+                "--p2p-bind",
+                "0.0.0.0",
+                "--p2p-port",
+                "28800",
+                "--p2p-publik",
+                "/ip4/203.0.113.7/tcp/28800"
+            ],
+        ]
+        .concat()
+    );
+    assert_eq!(
+        urai_publik("/ip6/2001:db8::7/tcp/30000"),
+        Some(("::", 30000))
+    );
+    for salah in [
+        "",
+        "/ip4/203.0.113.7/tcp/80",
+        "/ip4/203.0.113.7/tcp/70000",
+        "/ip4/203.0.113/tcp/28800",
+        "/ip4/203.0.113.7/udp/28800",
+        "/ip4/203.0.113.7/tcp/28800/p2p/12D3",
+        "/dns4/contoh.test/tcp/28800",
+        "/ip6/203.0.113.7/tcp/28800",
+    ] {
+        assert_eq!(urai_publik(salah), None, "{salah}");
+        assert_eq!(teks(argumen_node(&folder, Some(salah))), dasar, "{salah}");
+    }
 }
 
 #[test]

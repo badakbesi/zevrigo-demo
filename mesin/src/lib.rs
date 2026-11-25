@@ -9,10 +9,14 @@
 //! - Penambang: putaran `zevrigo-miner --payout <payload> --payout-kind <k> --blocks 1`, baris `blok diterima: tinggi N, ...,
 //!   id X` dicatat, lalu jeda 60, 120, atau 300 detik.
 //! - Alamat hadiah diurai MOD-09 (`decode_address`) menjadi payload. Tidak ada kunci rahasia di mesin ini.
+//! - Mode node publik (pengendali VPS, RENCANA_T17 bagian 9.3): bila variabel lingkungan [`ENV_P2P_PUBLIK`] berisi
+//!   `/ip4/<ip>/tcp/<port>` atau `/ip6/<ip>/tcp/<port>`, node juga mendengar P2P di semua antarmuka pada port itu dan
+//!   mengumumkan alamat itu ([`argumen_node`]). Aplikasi desktop tidak memakainya.
 
 #![forbid(unsafe_code)]
 
 use std::collections::VecDeque;
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -42,6 +46,8 @@ pub(crate) const BERKAS_PENGATURAN: &str = "pengaturan-zevrigo-node.json";
 pub(crate) const JEDA_SAH: [u64; 3] = [60, 120, 300];
 /// Batas waktu menunggu node berhenti sendiri sebelum dihentikan paksa.
 const TUNGGU_BERHENTI: Duration = Duration::from_secs(30);
+/// Variabel lingkungan alamat publik node (mode node publik pengendali VPS): multiaddr `/ip4/<ip>/tcp/<port>`.
+pub const ENV_P2P_PUBLIK: &str = "ZVRG_P2P_PUBLIK";
 /// Windows: proses anak tanpa jendela konsol (`CREATE_NO_WINDOW`).
 #[cfg(windows)]
 const TANPA_JENDELA: u32 = 0x0800_0000;
@@ -73,6 +79,14 @@ pub struct KeadaanNode {
     pub(crate) detail_galat: Option<String>,
 }
 
+impl KeadaanNode {
+    /// Status node: `mati`, `menyala`, `menyambung`, `mengejar`, `sinkron`, atau `galat`.
+    #[must_use]
+    pub const fn status(&self) -> &'static str {
+        self.status
+    }
+}
+
 /// Blok yang ditemukan penambang.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +108,14 @@ pub struct KeadaanTambang {
     pub(crate) blok_terakhir: Vec<BlokDitemukan>,
     pub(crate) pesan_galat: Option<String>,
     pub(crate) detail_galat: Option<String>,
+}
+
+impl KeadaanTambang {
+    /// Status penambang: `berhenti`, `menambang`, atau `menunggu`.
+    #[must_use]
+    pub const fn status(&self) -> &'static str {
+        self.status
+    }
 }
 
 /// Satu baris log.
@@ -249,6 +271,45 @@ pub(crate) fn bersihkan_baris(baris: &str) -> String {
         }
     }
     hasil
+}
+
+/// `(alamat dengar, port)` dari multiaddr `/ip4/<ipv4>/tcp/<port>` atau `/ip6/<ipv6>/tcp/<port>` dengan port 1024 sampai
+/// 65535; selain itu `None`. Alamat dengar `0.0.0.0` untuk IPv4 dan `::` untuk IPv6.
+#[must_use]
+pub fn urai_publik(multiaddr: &str) -> Option<(&'static str, u16)> {
+    let bagian: Vec<&str> = multiaddr.split('/').collect();
+    let (dengar, sah) = match bagian.as_slice() {
+        ["", "ip4", ip, "tcp", _] => ("0.0.0.0", ip.parse::<std::net::Ipv4Addr>().is_ok()),
+        ["", "ip6", ip, "tcp", _] => ("::", ip.parse::<std::net::Ipv6Addr>().is_ok()),
+        _ => return None,
+    };
+    let port = bagian.get(4)?.parse::<u16>().ok().filter(|p| *p >= 1024)?;
+    sah.then_some((dengar, port))
+}
+
+/// Argumen node: regtest, folder data, seed resmi. Dengan `publik` yang sah ([`urai_publik`]) node juga mendengar P2P di
+/// semua antarmuka pada port alamat itu dan mengumumkannya (`--p2p-bind`, `--p2p-port`, `--p2p-publik`).
+#[must_use]
+pub fn argumen_node(folder: &Path, publik: Option<&str>) -> Vec<OsString> {
+    let mut argumen: Vec<OsString> = vec![
+        "--regtest".into(),
+        "--datadir".into(),
+        folder.as_os_str().to_owned(),
+        "--seed-resmi".into(),
+    ];
+    if let Some(alamat) = publik
+        && let Some((dengar, port)) = urai_publik(alamat)
+    {
+        argumen.extend([
+            "--p2p-bind".into(),
+            dengar.into(),
+            "--p2p-port".into(),
+            port.to_string().into(),
+            "--p2p-publik".into(),
+            alamat.into(),
+        ]);
+    }
+    argumen
 }
 
 /// `true` bila `url` adalah tautan resmi yang boleh dibuka aplikasi di browser sistem.
@@ -588,11 +649,21 @@ impl Mesin {
                 self.folder.display()
             )
         })?;
+        let publik = std::env::var(ENV_P2P_PUBLIK)
+            .ok()
+            .filter(|alamat| !alamat.trim().is_empty());
+        if let Some(alamat) = &publik {
+            if urai_publik(alamat).is_some() {
+                self.catat("aplikasi", &format!("mode node publik: {alamat}"));
+            } else {
+                self.catat(
+                    "aplikasi",
+                    &format!("alamat node publik tidak sah, diabaikan: {alamat}"),
+                );
+            }
+        }
         let mut child = perintah(&self.bin_node)
-            .arg("--regtest")
-            .arg("--datadir")
-            .arg(&self.folder)
-            .arg("--seed-resmi")
+            .args(argumen_node(&self.folder, publik.as_deref()))
             .env("NO_COLOR", "1")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

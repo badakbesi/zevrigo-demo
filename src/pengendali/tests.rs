@@ -11,13 +11,19 @@ use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 use zevrigo_node_mesin::Mesin;
-use zevrigo_primitives::{Network, OutputKind};
+use zevrigo_primitives::{Amount, Network, OutputKind, QUANTA_PER_ZVRG};
 use zevrigo_rpc::error::{INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR};
+use zevrigo_rpc::{
+    BlockInfo, BlockTemplate, ChainInfo, CompactHex, GetBlockTemplateParams, Hex32, KindNumber,
+    MempoolInfo, MempoolScan, NetworkName, Quanta, RpcBackend, RpcError, RpcServer,
+    SendRawTransactionResult, SubmitBlockResult, UtxoInfo,
+};
 use zevrigo_wallet_core::encode_address;
 
 use super::{
-    GALAT_PERINTAH, METODE_PENGENDALI, OpsiPengendali, TOKEN_MIN, baca_hash_token, parse_perintah,
-    router, token_cocok, token_dari_kepala,
+    BERKAS_LANJUT, GALAT_PERINTAH, METODE_PENGENDALI, OpsiPengendali, TOKEN_MIN, baca_hash_token,
+    baca_lanjut, hapus_lanjut, parse_perintah, router, simpan_lanjut, token_cocok,
+    token_dari_kepala,
 };
 use crate::limit::Limits;
 
@@ -52,6 +58,10 @@ struct Setup {
 
 impl Setup {
     fn start(limits: Option<Limits>) -> Self {
+        Self::start_node(limits, "http://127.0.0.1:9".to_owned())
+    }
+
+    fn start_node(limits: Option<Limits>, rpc_node: String) -> Self {
         let dir = folder();
         std::fs::write(dir.join("token.sha256"), format!("{}  -\n", hex(TOKEN))).unwrap();
         let mesin = Arc::new(Mesin::baru(
@@ -71,6 +81,7 @@ impl Setup {
                 limits,
                 trusted: Arc::new(RwLock::new(Vec::new())),
                 versi_node: "zevrigo-node 0.1.0".to_owned(),
+                rpc_node,
             },
         );
         let server = rt.spawn(async move {
@@ -211,7 +222,7 @@ fn parses_requests() {
         let answer = parse_perintah(body.to_string().as_bytes()).unwrap_err();
         assert_eq!(code(&answer), Some(i64::from(expected)), "{answer}");
     }
-    assert_eq!(METODE_PENGENDALI.len(), 11);
+    assert_eq!(METODE_PENGENDALI.len(), 12);
 }
 
 #[test]
@@ -368,4 +379,157 @@ fn limits_wrong_tokens_and_large_bodies() {
         .collect();
     assert_eq!(status.last(), Some(&429), "{status:?}");
     ketat.finish();
+}
+
+#[test]
+fn mining_marker_is_kept_until_stopped_by_command() {
+    let dir = folder();
+    assert_eq!(baca_lanjut(&dir), None);
+    let alamat = encode_address(Network::Regtest, OutputKind::SingleKey, &[3; 32]);
+    simpan_lanjut(&dir, &format!(" {alamat} "), 120).unwrap();
+    assert_eq!(baca_lanjut(&dir), Some((alamat.clone(), 120)));
+    std::fs::write(dir.join(BERKAS_LANJUT), "rusak").unwrap();
+    assert_eq!(baca_lanjut(&dir), None);
+    hapus_lanjut(&dir);
+    hapus_lanjut(&dir);
+    assert!(!dir.join(BERKAS_LANJUT).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let setup = Setup::start(None);
+    let data = setup.dir.join("data");
+    // Mulai tambang yang ditolak (node belum sinkron) tidak menulis penanda.
+    assert_eq!(
+        code(&call(
+            setup.addr,
+            "mulai_tambang",
+            &json!({"alamat": alamat, "jeda": 60})
+        )),
+        Some(i64::from(GALAT_PERINTAH))
+    );
+    assert_eq!(baca_lanjut(&data), None);
+    for metode in ["berhenti_tambang", "hentikan_node"] {
+        simpan_lanjut(&data, &alamat, 60).unwrap();
+        assert_eq!(call(setup.addr, metode, &json!({}))["result"], Value::Null);
+        assert_eq!(baca_lanjut(&data), None, "{metode}");
+    }
+    setup.finish();
+}
+
+/// Node tiruan untuk `saldo`: tinggi 200, tiga output ke payload `0x33..` (dua matang, satu belum).
+struct NodeSaldo;
+
+fn h(byte: u8) -> Hex32 {
+    Hex32::new([byte; 32])
+}
+
+fn utxo(index: u32, zvrg: u128, spendable_at: u64) -> UtxoInfo {
+    UtxoInfo {
+        txid: h(0x11),
+        index,
+        amount: Quanta::new(Amount::from_quanta(zvrg * QUANTA_PER_ZVRG)),
+        kind: KindNumber::new(OutputKind::SingleKey),
+        payload: h(0x33),
+        height: spendable_at.saturating_sub(100),
+        is_coinbase: true,
+        confirmations: 1,
+        spendable_at,
+    }
+}
+
+impl RpcBackend for NodeSaldo {
+    fn chain_info(&self) -> Result<ChainInfo, RpcError> {
+        Ok(ChainInfo {
+            network: NetworkName::new(Network::Regtest),
+            height: 200,
+            best_block_id: h(0xb7),
+            chainwork: h(0x00),
+            next_target: CompactHex::new(0x207f_ffff),
+            median_time_past: 1_793_145_600,
+            mined_total: Quanta::new(Amount::from_quanta(5)),
+            total_supply: Quanta::new(Amount::from_quanta(6)),
+            mempool_count: 0,
+        })
+    }
+
+    fn block_hash(&self, _height: u64) -> Result<Hex32, RpcError> {
+        Err(RpcError::NotFound)
+    }
+
+    fn block(&self, _block_id: Hex32) -> Result<BlockInfo, RpcError> {
+        Err(RpcError::NotFound)
+    }
+
+    fn block_template(&self, _params: &GetBlockTemplateParams) -> Result<BlockTemplate, RpcError> {
+        Err(RpcError::NotFound)
+    }
+
+    fn submit_block(&self, _block: &[u8]) -> Result<SubmitBlockResult, RpcError> {
+        Err(RpcError::NotFound)
+    }
+
+    fn send_raw_transaction(&self, _tx: &[u8]) -> Result<SendRawTransactionResult, RpcError> {
+        Err(RpcError::NotFound)
+    }
+
+    fn mempool(&self) -> Result<MempoolInfo, RpcError> {
+        Ok(MempoolInfo { txids: Vec::new() })
+    }
+
+    fn scan_utxos(&self, payloads: &[Hex32]) -> Result<Vec<UtxoInfo>, RpcError> {
+        if payloads == [h(0x33)] {
+            Ok(vec![utxo(0, 3, 150), utxo(1, 2, 201), utxo(2, 7, 260)])
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    fn scan_mempool(&self, _payloads: &[Hex32]) -> Result<MempoolScan, RpcError> {
+        Ok(MempoolScan {
+            spent: Vec::new(),
+            outputs: Vec::new(),
+        })
+    }
+}
+
+#[test]
+fn reports_balance_of_reward_address() {
+    let rt = Runtime::new().unwrap();
+    let node = rt
+        .block_on(RpcServer::start(
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            Arc::new(NodeSaldo),
+        ))
+        .unwrap();
+    let setup = Setup::start_node(None, format!("http://{}", node.local_addr()));
+    let ada = encode_address(Network::Regtest, OutputKind::SingleKey, &[0x33; 32]);
+    let jawab = call(setup.addr, "saldo", &json!({"alamat": ada}));
+    assert_eq!(
+        jawab["result"],
+        json!({"tinggi": 200, "matang": "5", "belumMatang": "7", "jumlahOutput": 3}),
+        "{jawab}"
+    );
+    let kosong = encode_address(Network::Regtest, OutputKind::SingleKey, &[0x44; 32]);
+    assert_eq!(
+        call(setup.addr, "saldo", &json!({"alamat": kosong}))["result"],
+        json!({"tinggi": 200, "matang": "0", "belumMatang": "0", "jumlahOutput": 0})
+    );
+    let testnet = encode_address(Network::Testnet, OutputKind::SingleKey, &[0x33; 32]);
+    assert_eq!(
+        code(&call(setup.addr, "saldo", &json!({"alamat": testnet}))),
+        Some(i64::from(INVALID_PARAMS))
+    );
+    assert_eq!(
+        code(&call(setup.addr, "saldo", &json!({}))),
+        Some(i64::from(INVALID_PARAMS))
+    );
+    setup.finish();
+    rt.block_on(node.stop());
+
+    let mati = Setup::start(None);
+    let ada = encode_address(Network::Regtest, OutputKind::SingleKey, &[0x33; 32]);
+    assert_eq!(
+        code(&call(mati.addr, "saldo", &json!({"alamat": ada}))),
+        Some(i64::from(GALAT_PERINTAH))
+    );
+    mati.finish();
 }

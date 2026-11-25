@@ -1,0 +1,297 @@
+# Paket Zevrigo Node untuk VPS (RENCANA_T17 bagian 9, DEC-45, DEC-46; nama dari pencipta 25 November 2026: tag
+# `demo-zevrigo-vps`, pengguna `demo-zevrigo`, layanan `demo-zevrigo-node`, skrip `demo-zevrigo-kendali`).
+# Jalan saat main berubah di vps/, mesin/, src/pengendali/, atau workflow ini (build + uji pasang sebagai layanan systemd, tanpa
+# rilis), manual (workflow_dispatch), atau saat pencipta mem-push tag `demo-zevrigo-vps` (build + uji + rilis DRAF).
+# Isi paket (folder demo-zevrigo-vps/): zevrigo-node, zevrigo-miner, zevrigo-cli (repo inti), zevrigo-demo (mode pengendali),
+# demo-zevrigo-kendali, demo-zevrigo-node.service, README.md, VERSI, LICENSE-MIT, LICENSE-APACHE. Linux x86_64 (ubuntu-22.04,
+# glibc 2.35). Uji: paket dipasang di runner Ubuntu 22.04 dengan systemd sungguhan (pengguna runner = pengguna SSH), node
+# sinkron dengan seed demo, menambang ke alamat uji tanpa kunci, saldo, penambang dilanjutkan sesudah layanan restart, perbarui
+# (pasang ulang), ganti token, batas CPU, node publik (validasi + mati), copot dengan dan tanpa data. Belum ditandatangani (DEC-40).
+
+name: Paket VPS Zevrigo Node
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["demo-zevrigo-vps"]
+    # Hanya untuk main; GitHub tidak memeriksa paths saat tag di-push.
+    paths: ["vps/**", "mesin/**", "src/pengendali/**", ".github/workflows/rilis-vps.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rilis-vps-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZEVRIGO_CORE_REF: be71d5750b4a67d02f1d66e965637eade6780191
+  PAKET: demo-zevrigo-vps-linux-x86_64.tar.gz
+  CARGO_TERM_COLOR: never
+
+jobs:
+  build:
+    name: Build Linux x86_64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: zevrigo-demo
+          persist-credentials: false
+
+      - name: Checkout repo inti (node, miner, CLI, crate inti)
+        uses: actions/checkout@v4
+        with:
+          repository: badakbesi/zevrigo
+          ref: ${{ env.ZEVRIGO_CORE_REF }}
+          path: zevrigo
+          persist-credentials: false
+
+      - name: Toolchain Rust (rust-toolchain.toml kedua repo)
+        run: |
+          (cd zevrigo && rustup toolchain install && rustc --version)
+          (cd zevrigo-demo && rustup toolchain install && rustc --version)
+
+      - name: Pustaka sistem (cmake + g++ untuk RandomX)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake make g++ pkg-config
+
+      - name: Build (Cargo.lock tetap)
+        run: |
+          set -euo pipefail
+          (cd zevrigo && cargo build --release --locked -p zevrigo-node -p zevrigo-miner -p zevrigo-cli)
+          (cd zevrigo-demo && cargo build --release --locked --bin zevrigo-demo)
+
+      - name: Susun paket
+        run: |
+          set -euo pipefail
+          D=paket/demo-zevrigo-vps; mkdir -p "$D"
+          for b in zevrigo-node zevrigo-miner zevrigo-cli; do install -m 755 "zevrigo/target/release/$b" "$D/$b"; done
+          install -m 755 zevrigo-demo/target/release/zevrigo-demo "$D/zevrigo-demo"
+          install -m 755 zevrigo-demo/vps/demo-zevrigo-kendali "$D/demo-zevrigo-kendali"
+          install -m 644 zevrigo-demo/vps/demo-zevrigo-node.service zevrigo-demo/vps/README.md "$D/"
+          install -m 644 zevrigo/LICENSE-MIT zevrigo/LICENSE-APACHE "$D/"
+          echo "demo-zevrigo-vps zevrigo-demo ${GITHUB_SHA:0:7} inti ${ZEVRIGO_CORE_REF:0:7} $(date -u +%Y-%m-%d)" > "$D/VERSI"
+          bash -n "$D/demo-zevrigo-kendali"
+          "$D/zevrigo-node" --version; "$D/zevrigo-miner" --version; "$D/zevrigo-cli" --version; "$D/zevrigo-demo" --version
+          "$D/zevrigo-demo" --help | grep -q 'zevrigo-demo pengendali --datadir'
+          M=$(objdump -T "$D/zevrigo-node" "$D/zevrigo-demo" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -n 1); echo "glibc tertinggi: $M"
+          (cd paket && tar --owner=0 --group=0 --numeric-owner -czf "$PAKET" demo-zevrigo-vps && sha256sum "$PAKET" | tee SHA256SUMS.txt)
+          ls -l paket
+
+      - name: Artefak
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-zevrigo-vps
+          path: |
+            paket/${{ env.PAKET }}
+            paket/SHA256SUMS.txt
+          retention-days: 30
+          if-no-files-found: error
+
+  uji:
+    name: Uji pasang sebagai layanan systemd (Ubuntu 22.04)
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Ambil paket
+        uses: actions/download-artifact@v4
+        with:
+          name: demo-zevrigo-vps
+          path: unduh
+
+      - name: Uji
+        env:
+          K: /usr/local/sbin/demo-zevrigo-kendali
+        run: |
+          set -euo pipefail
+          cd unduh && sha256sum -c SHA256SUMS.txt && mkdir -p /tmp/p && tar -xzf "$PAKET" -C /tmp/p && cd /tmp/p
+          ls -l demo-zevrigo-vps
+          P=./demo-zevrigo-vps/demo-zevrigo-kendali
+          harus() { if ! "$@"; then echo "GAGAL: $*"; sudo journalctl -u demo-zevrigo-node -n 60 --no-pager || true; exit 1; fi; }
+          tidak() { if "$@" > /dev/null 2>&1; then echo "GAGAL (harus tidak berhasil): $*"; exit 1; fi; }
+          baru_token() { head -c 48 /dev/urandom | base64 | tr -d '/+=\n' | head -c 64; }
+          sha() { printf %s "$1" | sha256sum | cut -d' ' -f1; }
+          kode() { curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $1" --data '{}' http://127.0.0.1:28808/; }
+          TOKEN=$(baru_token)
+          # Panggilan JSON-RPC ke pengendali dengan token $TOKEN; mencetak jawaban JSON.
+          rpc() {
+            local p="${2:-}"; [ -n "$p" ] || p='{}'
+            curl -s -m 30 -X POST -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+              --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":$p}" http://127.0.0.1:28808/
+          }
+          ambil() { python3 -c 'import json,sys
+          d = json.load(sys.stdin)
+          for k in sys.argv[1].split("."): d = d[k]
+          print(d)' "$1"; }
+          tunggu() { # tunggu <detik> <judul> <perintah...>
+            local t=$1 j=$2; shift 2; local akhir=$(( $(date +%s) + t ))
+            while [ "$(date +%s)" -lt "$akhir" ]; do if "$@" > /dev/null 2>&1; then echo "ok: $j"; return 0; fi; sleep 5; done
+            echo "GAGAL: $j"; sudo journalctl -u demo-zevrigo-node -n 60 --no-pager || true; exit 1; }
+          sinkron() { [ "$(rpc keadaan_node | ambil result.status)" = sinkron ]; }
+          blok() { [ "$(rpc keadaan_tambang | ambil result.blokSesiIni)" -ge 1 ]; }
+          menjawab() { [ "$(kode x)" = 401 ]; }
+
+          echo "== galat yang harus ditolak sebelum pasang"
+          tidak sudo "$P"
+          tidak sudo "$P" tidak-ada
+          tidak sudo "$P" batas-cpu 50
+          tidak sudo "$P" node-publik nyala 1.2.3.4
+          tidak sudo "$P" pasang --token-sha256 xyz
+          tidak sudo "$P" pasang
+          echo "ok: perintah salah ditolak"
+
+          echo "== pasang baru"
+          harus sudo "$P" pasang --pengguna-ssh runner --token-sha256 "$(sha "$TOKEN")"
+          harus systemctl is-active demo-zevrigo-node
+          harus id demo-zevrigo
+          sudo cat /etc/sudoers.d/demo-zevrigo
+          harus sudo visudo -cf /etc/sudoers.d/demo-zevrigo
+          harus [ "$(stat -c '%U %a' /var/lib/demo-zevrigo)" = "demo-zevrigo 750" ]
+          harus [ "$(sudo stat -c '%U %a' /var/lib/demo-zevrigo/token-pengendali.sha256)" = "demo-zevrigo 600" ]
+          harus [ "$(ps -o uid= -p "$(systemctl show -p MainPID --value demo-zevrigo-node)" | tr -d ' ')" = "$(id -u demo-zevrigo)" ]
+          sudo "$K" status > status.json; cat status.json
+          harus python3 -c 'import json; d=json.load(open("status.json")); assert d["layanan"]=="active" and d["kuotaCpu"]=="500ms" and d["cpu"]>=1, d'
+          harus [ "$(kode salah-token-salah-token-salah-token-salah)" = 401 ]
+          ss -ltn | awk '{print $4}' | grep -E ':(28800|28801|28808)$' > dengar.txt || true
+          cat dengar.txt
+          harus grep -q '^127\.0\.0\.1:28808$' dengar.txt
+          if grep -vqE '^127\.0\.0\.1:' dengar.txt; then echo "GAGAL: port terbuka di luar 127.0.0.1"; exit 1; fi
+          rpc info; echo
+          tunggu 600 "node sinkron" sinkron
+          rpc keadaan_node; echo
+
+          echo "== menambang ke alamat uji tanpa kunci"
+          cat > alamat.py <<'PY'
+          import os
+          CH = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+          G = [0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3]
+          def pm(v):
+              c = 1
+              for x in v:
+                  t = c >> 25
+                  c = ((c & 0x1FFFFFF) << 5) ^ x
+                  for i in range(5):
+                      if (t >> i) & 1:
+                          c ^= G[i]
+              return c
+          acc = bits = 0
+          d = [0]
+          for b in os.urandom(32):
+              acc = ((acc << 8) | b) & 0xFFF
+              bits += 8
+              while bits >= 5:
+                  bits -= 5
+                  d.append((acc >> bits) & 31)
+          if bits:
+              d.append((acc << (5 - bits)) & 31)
+          h = "rzvrg"
+          v = pm([ord(c) >> 5 for c in h] + [0] + [ord(c) & 31 for c in h] + d + [0] * 6) ^ 0x2BC830A3
+          d += [(v >> 5 * (5 - i)) & 31 for i in range(6)]
+          print(h + "1" + "".join(CH[x] for x in d))
+          PY
+          ALAMAT=$(python3 alamat.py); echo "alamat uji: $ALAMAT"
+          harus [ "$(rpc periksa_alamat "{\"alamat\":\"$ALAMAT\"}" | ambil result.sah)" = True ]
+          rpc mulai_tambang "{\"alamat\":\"$ALAMAT\",\"jeda\":60}"; echo
+          tunggu 300 "blok pertama" blok
+          harus sudo test -s /var/lib/demo-zevrigo/tambang-lanjut.json
+          rpc saldo "{\"alamat\":\"$ALAMAT\"}" > saldo.json; cat saldo.json; echo
+          harus python3 -c 'import json; r=json.load(open("saldo.json"))["result"]; assert r["jumlahOutput"]>=1 and r["belumMatang"]!="0" and r["matang"]=="0", r'
+
+          echo "== layanan restart: penambang dilanjutkan sendiri"
+          harus sudo systemctl restart demo-zevrigo-node
+          tunggu 120 "pengendali menjawab lagi" menjawab
+          tunggu 600 "penambang dilanjutkan dan menemukan blok" blok
+          sudo journalctl -u demo-zevrigo-node --no-pager > jurnal.txt
+          harus grep -q 'penambang dilanjutkan sesudah mulai ulang' jurnal.txt
+          rpc berhenti_tambang; echo
+          if sudo test -e /var/lib/demo-zevrigo/tambang-lanjut.json; then echo "GAGAL: penanda tidak dihapus"; exit 1; fi
+          echo "ok: penanda penambangan dihapus sesudah berhenti_tambang"
+
+          echo "== perbarui (pasang ulang dari paket yang sama), ganti token, batas CPU, node publik"
+          TINGGI=$(rpc keadaan_node | ambil result.tinggiLokal)
+          sleep 1
+          harus sudo "$P" pasang
+          harus test -L /opt/demo-zevrigo/sebelumnya
+          harus [ "$(readlink /opt/demo-zevrigo/sekarang)" != "$(readlink /opt/demo-zevrigo/sebelumnya)" ]
+          LAMA=$TOKEN; TOKEN=$(baru_token)
+          harus sudo "$K" token "$(sha "$TOKEN")"
+          harus [ "$(kode "$LAMA")" = 401 ]
+          tunggu 300 "sinkron lagi dengan token baru" sinkron
+          harus [ "$(rpc keadaan_node | ambil result.tinggiLokal)" -ge "$TINGGI" ]
+          harus sudo "$K" batas-cpu 30
+          harus [ "$(systemctl show -p CPUQuotaPerSecUSec --value demo-zevrigo-node)" = 300ms ]
+          tidak sudo "$K" batas-cpu 5
+          harus sudo "$K" batas-cpu 50
+          tidak sudo "$K" node-publik nyala 999.1.1.1
+          tidak sudo "$K" node-publik nyala 1.2.3.4 80
+          tidak sudo "$K" node-publik nyala bukan-ip
+          harus sudo "$K" node-publik mati
+          tidak sudo "$K" cabut-kunci 'bukan kunci'
+          if [ ! -s "$HOME/.ssh/authorized_keys" ]; then tidak sudo "$K" amankan-ssh; echo "ok: amankan-ssh tanpa kunci ditolak"; fi
+
+          echo "== copot tanpa hapus data, pasang lagi memakai chain lama"
+          tunggu 300 "sinkron sebelum copot" sinkron
+          TINGGI=$(rpc keadaan_node | ambil result.tinggiLokal)
+          harus sudo "$K" copot
+          tidak systemctl is-active demo-zevrigo-node
+          harus test -d /var/lib/demo-zevrigo
+          harus test ! -e /opt/demo-zevrigo
+          harus test ! -e "$K"
+          harus sudo "$P" pasang --pengguna-ssh runner
+          tunggu 300 "sinkron sesudah pasang lagi" sinkron
+          harus [ "$(rpc keadaan_node | ambil result.tinggiLokal)" -ge "$TINGGI" ]
+
+          echo "== copot --hapus-data"
+          harus sudo "$K" copot --hapus-data
+          harus test ! -e /var/lib/demo-zevrigo
+          harus test ! -e /etc/sudoers.d/demo-zevrigo
+          tidak id demo-zevrigo
+          sleep 2
+          tidak pgrep -f /opt/demo-zevrigo
+          echo "SEMUA UJI LOLOS"
+
+  rilis:
+    name: Rilis draf
+    needs: [build, uji]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (catatan rilis)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Ambil paket
+        uses: actions/download-artifact@v4
+        with:
+          name: demo-zevrigo-vps
+          path: rilis
+
+      - name: Catatan
+        run: |
+          set -euo pipefail
+          cd rilis && sha256sum -c SHA256SUMS.txt
+          S=$(sha256sum "$PAKET" | cut -d' ' -f1)
+          sed -e "s|{{TAG}}|$GITHUB_REF_NAME|g" -e "s|{{COMMIT}}|${GITHUB_SHA:0:7}|g" -e "s|{{INTI}}|${ZEVRIGO_CORE_REF:0:7}|g" \
+              -e "s|{{BERKAS}}|$PAKET|g" -e "s|{{SHA}}|$S|g" ../vps/rilis-catatan.md > catatan.md
+          ! grep -q '{{' catatan.md || { echo "catatan rilis masih berisi {{...}}"; exit 1; }
+
+      - name: Rilis draf (belum terbit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "rilis $GITHUB_REF_NAME sudah ada; tidak ditimpa"; exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --draft --prerelease --verify-tag \
+            --title "Zevrigo Node untuk VPS (jaringan demo regtest)" --notes-file rilis/catatan.md \
+            "rilis/$PAKET" rilis/SHA256SUMS.txt

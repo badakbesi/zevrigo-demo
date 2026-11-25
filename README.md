@@ -106,3 +106,7 @@ Aplikasi desktop Windows dan Linux (DEC-44): node dan penambang jaringan demo de
 Mode `zevrigo-demo pengendali` (DEC-45) menjalankan node dan penambang di VPS dan menerima perintah bertoken dari aplikasi
 Zevrigo Node di Android (RENCANA_T17). Mesinnya crate [`mesin/`](mesin), sama dengan aplikasi desktop. Rincian opsi di
 `zevrigo-demo --help` dan [MOD-18](docs/modules/MOD-18-demo.md).
+
+Paket VPS di [`vps/`](vps) (DEC-46): aplikasi Android memasangnya lewat SSH sebagai layanan systemd `demo-zevrigo-node` dengan
+skrip bantu `demo-zevrigo-kendali`, tanpa port baru; dibangun dan diuji workflow
+[rilis-vps.yml](.github/workflows/rilis-vps.yml), tag `demo-zevrigo-vps`.

@@ -27,7 +27,17 @@ yang dijalankan sebagai tiga proses di belakang Cloudflare Tunnel, masing-masing
   `nyalakan_node`, `hentikan_node`, `mulai_tambang`, `berhenti_tambang`. SHA-256 token di berkas (dibaca ulang setiap
   permintaan), perbandingan tanpa berhenti di byte pertama yang beda, `401` tanpa token yang benar, `429` untuk token salah
   berulang dan batas laju (bawaan 5 per detik), `405`, `413` di atas 16 KiB. Perintah kendali dicatat di log program dan log
-  mesin. Port bawaan 28808. Di depannya Cloudflare Access service token (keputusan pencipta).
+  mesin. Port bawaan 28808. Sejak Q198 (DEC-46, jalur SSH; rancangan Cloudflare dibatalkan pencipta 25 November 2026):
+  dicapai aplikasi Android lewat terowongan SSH ke 127.0.0.1; metode `saldo {alamat}` (UTXO alamat hadiah di node sendiri:
+  matang/belum matang, ZVRG desimal); penanda `tambang-lanjut.json` di folder data (ditulis `mulai_tambang`, dihapus
+  `berhenti_tambang`/`hentikan_node`) sehingga dengan `--nyalakan-node` penambang dilanjutkan sesudah mulai ulang begitu node
+  sinkron; variabel `ZVRG_P2P_PUBLIK=/ip4|ip6/<ip>/tcp/<port>` menyalakan mode node publik di mesin (`--p2p-bind`,
+  `--p2p-port`, `--p2p-publik`).
+- Paket VPS `vps/` (Q198, nama dari pencipta): skrip bantu `demo-zevrigo-kendali` (perintah tetap: pasang, perbarui, token,
+  status, node-publik, batas-cpu, amankan-ssh, cabut-kunci, restart-vps, copot), layanan systemd `demo-zevrigo-node` (pengguna
+  `demo-zevrigo`, `/opt/demo-zevrigo/sekarang`, data `/var/lib/demo-zevrigo`, CPUQuota bawaan 50%, sandbox systemd), README,
+  catatan rilis. Workflow `rilis-vps.yml` membangun `demo-zevrigo-vps-linux-x86_64.tar.gz` dan mengujinya sebagai layanan
+  systemd sungguhan di Ubuntu 22.04; tag `demo-zevrigo-vps` = rilis draf.
 
 - `zevrigo-demo rpc [--node-url <url>] [--http-bind <ip>] [--http-port <port>] [--rate <n>] [--trust-proxy]` (TSK-M53):
   gerbang RPC untuk wallet peserta di `127.0.0.1:28804` (bawaan). Satu permintaan JSON-RPC 2.0 per `POST`; hanya
