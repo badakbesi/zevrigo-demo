@@ -3,8 +3,7 @@
 # COMPOSE_PROFILES tidak ada layanan publik yang dinyalakan, jadi seed dan tunnel tidak pernah hidup di dua tempat:
 #
 #   VPS: COMPOSE_PROFILES=vps docker compose -f compose.yaml -f compose.publik.yaml up -d --no-build
-#        seed (node), explorer, gerbang-rpc, penambang-cadangan, cloudflared, node-faucet + faucet, node-pengamat,
-#        demo-mobile-remote-vps (pengendali jarak jauh Zevrigo Node, Q196b)
+#        seed (node), explorer, gerbang-rpc, penambang-cadangan, cloudflared, node-faucet + faucet, node-pengamat
 #   PC:  COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d
 #        node-penambang + miner-berkala, node-treasury (kunci kantong treasury tidak di VPS)
 #   berhenti: COMPOSE_PROFILES=<vps|pc> docker compose -f compose.yaml -f compose.publik.yaml stop
@@ -26,8 +25,6 @@
 #   demo-seed-p2p.zevrigo.online    -> localhost:28803   seed P2P WebSocket
 #   demo-gerbang-rpc.zevrigo.online -> localhost:28804   gerbang RPC
 #   demo-faucet.zevrigo.online      -> node-faucet:28805 faucet
-#   demo-mobile-vps.zevrigo.online  -> demo-mobile-remote-vps:28808  pengendali Zevrigo Node Android (Q196b, DEC-45), lewat
-#                                      jaringan Docker; dilindungi Cloudflare Access (service token) DAN token pengendali
 # Tunnel lama (*.ratuaurion.store) tetap jalan paralel: wallet 0.3.1 dan Explorer 0.1.0 memakai host lama (RENCANA_T13).
 # Blog resmi tidak lagi di VPS (Q186, pencipta 22 November 2026): situs utama https://zevrigo.online di Cloudflare, dibangun
 # otomatis dari GitHub badakbesi/zevrigo-blog. Layanan blog, folder ~/zevrigo/blog, dan route zevrigo-blog.ratuaurion.store dihapus.
@@ -55,15 +52,6 @@
 #     --dari <alamat kantong Faucet> --to <alamat faucet dari log: alamat faucet:> --amount 10000
 # Seed dengan PeerId lain (misalnya volume seed baru) = node versi baru dengan daftar seed resmi baru (DEC-43); variabel
 # ZVRG_SEED tidak dipakai lagi sejak Q191.
-#
-# demo-mobile-remote-vps (Q196b, DEC-45, RENCANA_T17; nama host dan layanan dari pencipta 25 November 2026): zevrigo-demo mode
-# pengendali. Menjalankan node --seed-resmi dan penambangnya sendiri (proses anak di container ini, volume sendiri), tanpa
-# Docker socket, dan menerima perintah JSON-RPC bertoken dari aplikasi Zevrigo Node di Android. Hanya SHA-256 token yang
-# ada di VPS, di /data/token-pengendali.sha256 volume layanan ini (dibaca ulang setiap permintaan). Ganti atau cabut token:
-#   printf '%s  -\n' <sha256 token baru> | COMPOSE_PROFILES=vps docker compose -f compose.yaml -f compose.publik.yaml run --rm \
-#     --no-deps -T --entrypoint sh demo-mobile-remote-vps -c 'umask 077; cat > /data/token-pengendali.sha256'
-# Tanpa berkas itu program tidak mau mulai. Node menyala saat container mulai (--nyalakan-node); penambang mati sampai
-# diperintah dari aplikasi. Hadiah tambang ke alamat Zevrigo Wallet yang dikirim aplikasi; tidak ada kunci rahasia di VPS.
 #
 # miner-berkala (TSK-M46, TSK-M47): satu blok regtest setiap ZVRG_JEDA detik (bawaan 120 = waktu blok target), di namespace
 # node-penambang. Hadiah ke payload di /data/payout-penambang (volume node-penambang, dipasang baca saja); selama file itu
@@ -291,38 +279,9 @@ services:
     stop_grace_period: 30s
     restart: unless-stopped
 
-  demo-mobile-remote-vps:
-    profiles: ["vps"]
-    # Q196b (DEC-45): pengendali mendengar 0.0.0.0:28808 di namespace container sendiri (tanpa port host); cloudflared-zevrigo
-    # (namespace node) menjangkaunya lewat http://demo-mobile-remote-vps:28808. CF-Connecting-IP hanya dipercaya dari alamat
-    # layanan node. Node anak memakai 127.0.0.1:28800/28801 di namespace ini (tidak terbuka). SIGTERM: penambang lalu node
-    # dihentikan (node sampai 30 detik), karena itu stop_grace_period 45 detik; init menuai proses anak.
-    image: zevrigo:regtest
-    pull_policy: never
-    entrypoint: ["zevrigo-demo"]
-    command:
-      - pengendali
-      - --datadir
-      - /data
-      - --token-sha256
-      - /data/token-pengendali.sha256
-      - --http-bind
-      - 0.0.0.0
-      - --trust-proxy-host
-      - node
-      - --nyalakan-node
-    volumes:
-      - zvrg-demo-mobile-remote-vps:/data
-    init: true
-    mem_limit: 256m
-    cpus: 0.5
-    stop_grace_period: 45s
-    restart: unless-stopped
-
 volumes:
   zvrg-penambang:
   zvrg-treasury:
   zvrg-faucet:
   zvrg-faucet-dompet:
   zvrg-pengamat:
-  zvrg-demo-mobile-remote-vps:
