@@ -78,7 +78,7 @@ jobs:
           echo "demo-zevrigo-vps zevrigo-demo ${GITHUB_SHA:0:7} inti ${ZEVRIGO_CORE_REF:0:7} $(date -u +%Y-%m-%d)" > "$D/VERSI"
           bash -n "$D/demo-zevrigo-kendali"
           "$D/zevrigo-node" --version; "$D/zevrigo-miner" --version; "$D/zevrigo-cli" --version; "$D/zevrigo-demo" --version
-          "$D/zevrigo-demo" --help | grep -q 'zevrigo-demo pengendali --datadir'
+          "$D/zevrigo-demo" --help > "$RUNNER_TEMP/bantuan.txt"; grep -q 'zevrigo-demo pengendali --datadir' "$RUNNER_TEMP/bantuan.txt"
           M=$(objdump -T "$D/zevrigo-node" "$D/zevrigo-demo" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -n 1); echo "glibc tertinggi: $M"
           (cd paket && tar --owner=0 --group=0 --numeric-owner -czf "$PAKET" demo-zevrigo-vps && sha256sum "$PAKET" | tee SHA256SUMS.txt)
           ls -l paket
@@ -112,6 +112,8 @@ jobs:
           set -euo pipefail
           cd unduh && sha256sum -c SHA256SUMS.txt && mkdir -p /tmp/p && tar -xzf "$PAKET" -C /tmp/p && cd /tmp/p
           ls -l demo-zevrigo-vps
+          # Q198d: di bawah pipefail, pipa ke grep -q gagal acak (grep keluar dulu, program kena SIGPIPE); skrip bantu tanpa pola itu.
+          if grep -nE '[|][[:space:]]*grep[[:space:]]+-q' demo-zevrigo-vps/demo-zevrigo-kendali; then echo "GAGAL: pipa ke grep -q di skrip bantu"; exit 1; fi
           P=./demo-zevrigo-vps/demo-zevrigo-kendali
           harus() { if ! "$@"; then echo "GAGAL: $*"; sudo journalctl -u demo-zevrigo-node -n 60 --no-pager || true; exit 1; fi; }
           tidak() { if "$@" > /dev/null 2>&1; then echo "GAGAL (harus tidak berhasil): $*"; exit 1; fi; }
@@ -165,6 +167,16 @@ jobs:
           rpc info; echo
           tunggu 600 "node sinkron" sinkron
           rpc keadaan_node; echo
+
+          echo "== perbarui dengan SHA salah: ditolak, tanpa galat trap, folder kerja dibersihkan (Q198d)"
+          NOL=0000000000000000000000000000000000000000000000000000000000000000
+          if sudo "$K" perbarui "$NOL" > perbarui.txt 2>&1; then echo "GAGAL: perbarui dengan SHA salah berhasil"; exit 1; fi
+          cat perbarui.txt
+          harus grep -q '^galat: ' perbarui.txt
+          if grep -q 'unbound variable' perbarui.txt; then echo "GAGAL: perbarui: unbound variable"; exit 1; fi
+          if ls -d /tmp/demo-zevrigo-perbarui.* 2> /dev/null; then echo "GAGAL: folder kerja perbarui tertinggal"; exit 1; fi
+          harus systemctl is-active demo-zevrigo-node
+          echo "ok: perbarui menolak SHA salah tanpa sisa"
 
           echo "== menambang ke alamat uji tanpa kunci"
           cat > alamat.py <<'PY'

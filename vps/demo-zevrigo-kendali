@@ -50,7 +50,7 @@ tunggu_pengendali() {
   local batas=$(( $(date +%s) + ${1:-90} ))
   while [ "$(date +%s)" -lt "$batas" ]; do
     if (exec 3<>/dev/tcp/127.0.0.1/$PORT_PENGENDALI && printf 'POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}' >&3 \
-        && head -n 1 <&3 | grep -q '^HTTP/1.1 401') 2>/dev/null; then
+        && IFS= read -r -t 10 baris <&3 && [[ "$baris" == "HTTP/1.1 401"* ]]) 2>/dev/null; then
       return 0
     fi
     sleep 2
@@ -97,7 +97,10 @@ cmd_pasang() {
   for b in zevrigo-node zevrigo-miner zevrigo-cli zevrigo-demo demo-zevrigo-kendali demo-zevrigo-node.service VERSI; do
     [ -f "$asal/$b" ] || galat "paket tidak lengkap: $b tidak ada"
   done
-  "$asal/zevrigo-demo" --help | grep -q 'zevrigo-demo pengendali' || galat "zevrigo-demo di paket tanpa mode pengendali"
+  # Keluaran ditampung dulu (Q198d): di bawah pipefail, pipa ke grep -q gagal acak karena grep keluar sebelum program selesai
+  # menulis (program kena SIGPIPE, panik "Broken pipe"), sehingga paket yang sah ditolak.
+  local bantuan; bantuan=$("$asal/zevrigo-demo" --help 2>&1) || galat "zevrigo-demo di paket tidak bisa dijalankan"
+  [[ "$bantuan" == *"zevrigo-demo pengendali"* ]] || galat "zevrigo-demo di paket tanpa mode pengendali"
   local baru=0; [ -e "$PROGRAM/sekarang" ] || baru=1
   [ "$baru" = 0 ] || [ -n "$token" ] || [ -f "$DATA/token-pengendali.sha256" ] || galat "pemasangan baru butuh --token-sha256"
   [ "$baru" = 0 ] || [ -n "$ssh_user" ] || [ "${SUDO_USER:-root}" = root ] || ssh_user="$SUDO_USER"
@@ -167,8 +170,11 @@ cmd_perbarui() {
   if command -v curl > /dev/null; then unduh() { curl -fsSL --retry 3 --connect-timeout 30 -o "$2" "$1"; }
   elif command -v wget > /dev/null; then unduh() { wget -q -T 30 -t 3 -O "$2" "$1"; }
   else galat "curl atau wget tidak ada di VPS"; fi
-  local kerja; kerja=$(mktemp -d /tmp/demo-zevrigo-perbarui.XXXXXX)
-  trap 'rm -rf "$kerja"' EXIT
+  # Variabel global (Q198d): trap EXIT berjalan sesudah fungsi selesai; dengan variabel local dan set -u trap gagal
+  # ("unbound variable"), perbarui keluar 1 walaupun berhasil, dan folder kerja tertinggal di /tmp.
+  KERJA_PERBARUI=$(mktemp -d /tmp/demo-zevrigo-perbarui.XXXXXX)
+  trap 'rm -rf "${KERJA_PERBARUI:-}"' EXIT
+  local kerja="$KERJA_PERBARUI"
   unduh "$RILIS/SHA256SUMS.txt" "$kerja/SHA256SUMS.txt" || galat "SHA256SUMS.txt tidak bisa diunduh"
   grep -qxF "$sha  $PAKET" "$kerja/SHA256SUMS.txt" || galat "SHA-256 yang diminta tidak cocok dengan SHA256SUMS.txt rilis resmi"
   unduh "$RILIS/$PAKET" "$kerja/$PAKET" || galat "paket tidak bisa diunduh"
@@ -209,7 +215,8 @@ cmd_status() {
     "$(json_teks "$kuota")" "$(json_teks "${sshpw:-}")"
 }
 
-ufw_aktif() { command -v ufw > /dev/null && ufw status 2>/dev/null | grep -q '^Status: active'; }
+# Tanpa pipa ke grep -q (lihat cmd_pasang, Q198d).
+ufw_aktif() { command -v ufw > /dev/null || return 1; local s; s=$(ufw status 2>/dev/null) || return 1; [[ "$s" == "Status: active"* ]]; }
 
 cmd_node_publik() {
   butuh_root
