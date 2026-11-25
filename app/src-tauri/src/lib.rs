@@ -8,6 +8,9 @@
 #![forbid(unsafe_code)]
 
 mod perintah;
+/// Klien VPS untuk aplikasi Android (DEC-46, Q199a); hanya dengan fitur `vps`.
+#[cfg(feature = "vps")]
+pub mod vps;
 
 use std::sync::Arc;
 use std::time::Duration;

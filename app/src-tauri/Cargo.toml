@@ -32,6 +32,26 @@ serde_json.workspace = true
 # Mesin node + penambang (DEC-45, Q196a): crate zevrigo-demo/mesin, dipakai juga mode `pengendali` zevrigo-demo. Membawa
 # MOD-08 (tinggi chain lokal dan gerbang publik) dan MOD-09 (alamat hadiah); tanpa kunci rahasia.
 zevrigo-node-mesin.workspace = true
+# Klien VPS untuk aplikasi Android (DEC-46, RENCANA_T17 bagian 13, Q199a): fitur `vps`, mati secara bawaan sehingga program
+# desktop tidak berubah. russh + kripto ring tanpa fitur bawaan (86 paket baru di Cargo.lock, tepat daftar Q197 V1); tokio,
+# getrandom, sha2, hex, zeroize sudah ada di Cargo.lock.
+russh = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
+
+[features]
+# Modul `vps` (src/vps): SSH ke VPS pengguna, skrip bantu demo-zevrigo-kendali, terowongan ke pengendali. Dipakai build Android
+# (Q199c) dan uji sungguhan `examples/uji-vps.rs` (Q199a).
+vps = ["dep:russh", "dep:tokio", "dep:getrandom", "dep:sha2", "dep:hex", "dep:zeroize"]
+
+# Uji sungguhan modul vps dari PC ke VPS (q199a_uji.sh pencipta); hanya dengan fitur vps.
+[[example]]
+name = "uji-vps"
+path = "examples/uji-vps.rs"
+required-features = ["vps"]
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -66,3 +86,11 @@ serde = { version = "1.0.229", default-features = false, features = ["std", "der
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 # Mesin di repo ini (folder zevrigo-demo/mesin); crate inti di dalamnya dari repo `zevrigo` di folder sebelah (AGENDA P3).
 zevrigo-node-mesin = { path = "../../mesin" }
+# DEC-46 (pencipta 25 November 2026): SSH untuk Android = russh + ring, tanpa fitur bawaan (tanpa aws-lc-rs, flate2, RSA).
+russh = { version = "=0.65.4", default-features = false, features = ["ring"] }
+# Versi yang sudah ada di Cargo.lock (sama dengan wallet MOD-15).
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "net", "io-util", "time", "sync"] }
+getrandom = { version = "0.3.4", default-features = false }
+sha2 = { version = "0.10.9", default-features = false }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+zeroize = { version = "1.9.1", default-features = false, features = ["alloc"] }

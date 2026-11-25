@@ -34,4 +34,4 @@ app-web-check:
 	cd app && npm ci --ignore-scripts --no-audit --no-fund && npm run check
 
 app-check: app-web-check
-	cd app/src-tauri && cargo fmt -- --check && cargo clippy --locked --all-targets -- -D warnings && bash ../../scripts/check-forbidden.sh && cargo test --locked
+	cd app/src-tauri && cargo fmt -- --check && cargo clippy --locked --all-targets -- -D warnings && cargo clippy --locked --all-targets --features vps -- -D warnings && bash ../../scripts/check-forbidden.sh && cargo test --locked && cargo test --locked --features vps
