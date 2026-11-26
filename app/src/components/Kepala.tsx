@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { AlertTriangle, Monitor, Moon, Sun, X } from 'lucide-react';
 import type { Tema } from '../lib/backend';
 import { useAppStore } from '../lib/store';
@@ -24,7 +25,8 @@ function labelTema(tema: Tema): string {
   return TEKS.tema.sistem;
 }
 
-export function Kepala() {
+/** `aksi`: tombol tambahan di kanan sebelum tombol tema (mode VPS: Kunci). */
+export function Kepala({ aksi = null }: { aksi?: ReactNode } = {}) {
   const info = useAppStore((s) => s.info);
   const tema = useAppStore((s) => s.pengaturan.tema);
   const putarTema = useAppStore((s) => s.putarTema);
@@ -46,6 +48,8 @@ export function Kepala() {
           </span>
         </div>
 
+        <div className="flex items-center gap-2">
+        {aksi}
         <Button
           variant="secondary"
           size="sm"
@@ -54,8 +58,9 @@ export function Kepala() {
           title={teksTema}
         >
           {ikonTema(tema)}
-          <span>{teksTema}</span>
+          <span className="hidden sm:inline">{teksTema}</span>
         </Button>
+        </div>
       </div>
 
       {!spandukDitutup && (

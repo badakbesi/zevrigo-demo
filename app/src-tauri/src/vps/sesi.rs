@@ -125,6 +125,42 @@ pub enum Galat {
     Pengendali(String),
     /// Token pengendali ditolak (HTTP 401).
     TokenDitolak,
+    /// Aplikasi terkunci: kata sandi aplikasi belum dimasukkan.
+    Terkunci,
+    /// Kata sandi aplikasi salah (atau data VPS di HP diubah).
+    SandiSalah,
+    /// Data VPS di HP (brankas) tidak terbaca atau tidak bisa ditulis.
+    Brankas(String),
+    /// Langkah tidak sesuai tahap aplikasi sekarang.
+    Tahap(&'static str),
+}
+
+impl Galat {
+    /// Kode singkat untuk antarmuka.
+    #[must_use]
+    pub const fn kode(&self) -> &'static str {
+        match self {
+            Self::Masukan(_) => "masukan",
+            Self::Sistem(_) => "sistem",
+            Self::Sambung(_) => "sambung",
+            Self::SidikBerubah { .. } => "sidik_berubah",
+            Self::MasukDitolak => "masuk_ditolak",
+            Self::Perintah { .. } => "perintah",
+            Self::BatasWaktu(_) => "batas_waktu",
+            Self::Pengendali(_) => "pengendali",
+            Self::TokenDitolak => "token_ditolak",
+            Self::Terkunci => "terkunci",
+            Self::SandiSalah => "sandi_salah",
+            Self::Brankas(_) => "brankas",
+            Self::Tahap(_) => "tahap",
+        }
+    }
+
+    /// `true` bila sambungan SSH perlu dibuat ulang (putus atau batas waktu).
+    #[must_use]
+    pub const fn putus(&self) -> bool {
+        matches!(self, Self::Sambung(_) | Self::BatasWaktu(_))
+    }
 }
 
 impl fmt::Display for Galat {
@@ -148,6 +184,10 @@ impl fmt::Display for Galat {
             Self::BatasWaktu(apa) => write!(f, "batas waktu habis: {apa}"),
             Self::Pengendali(pesan) => write!(f, "pengendali di VPS: {pesan}"),
             Self::TokenDitolak => f.write_str("token pengendali ditolak VPS"),
+            Self::Terkunci => f.write_str("aplikasi terkunci; masukkan kata sandi aplikasi"),
+            Self::SandiSalah => f.write_str("kata sandi aplikasi salah"),
+            Self::Brankas(pesan) => write!(f, "data VPS di HP: {pesan}"),
+            Self::Tahap(pesan) => write!(f, "langkah tidak sesuai: {pesan}"),
         }
     }
 }
@@ -392,11 +432,16 @@ impl Sesi {
             .map_err(|_| Galat::BatasWaktu("perintah di VPS"))?
     }
 
-    /// Menutup sambungan dengan rapi.
-    pub async fn putus(self) {
+    /// Menutup sambungan dengan rapi (juga sambungan yang dipakai bersama lewat `Arc`).
+    pub async fn tutup(&self) {
         let _ = self
             .handle
             .disconnect(Disconnect::ByApplication, "", "id")
             .await;
+    }
+
+    /// Menutup sambungan dengan rapi.
+    pub async fn putus(self) {
+        self.tutup().await;
     }
 }

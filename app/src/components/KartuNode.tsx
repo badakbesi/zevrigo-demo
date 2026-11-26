@@ -30,6 +30,7 @@ export function KartuNode() {
   const hentikanNode = useAppStore((s) => s.hentikanNode);
   const bukaFolderData = useAppStore((s) => s.bukaFolderData);
   const salinTeks = useAppStore((s) => s.salinTeks);
+  const modeVps = useAppStore((s) => s.mode === 'vps');
 
   const [konfirmasiHentikan, setKonfirmasiHentikan] = useState(false);
 
@@ -201,27 +202,29 @@ export function KartuNode() {
           </div>
         </dl>
 
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
-          <span className="block text-xs text-slate-500 dark:text-slate-400">
-            {TEKS.node.folderData}
-          </span>
-          <div className="flex items-center justify-between gap-2">
-            <span
-              title={node.folderData}
-              className="font-mono text-xs text-slate-700 dark:text-slate-300 truncate min-w-0"
-            >
-              {node.folderData || '-'}
+        {!modeVps && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
+            <span className="block text-xs text-slate-500 dark:text-slate-400">
+              {TEKS.node.folderData}
             </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void bukaFolderData()}
-            >
-              <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{TEKS.node.bukaFolder}</span>
-            </Button>
+            <div className="flex items-center justify-between gap-2">
+              <span
+                title={node.folderData}
+                className="font-mono text-xs text-slate-700 dark:text-slate-300 truncate min-w-0"
+              >
+                {node.folderData || '-'}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void bukaFolderData()}
+              >
+                <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{TEKS.node.bukaFolder}</span>
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
 
         {node.pesanGalat && (
           <ErrorBox
@@ -233,7 +236,7 @@ export function KartuNode() {
       </div>
 
       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed pt-2 border-t border-slate-100 dark:border-slate-800/80">
-        {TEKS.node.bantuan}
+        {modeVps ? TEKS.node.bantuanVps : TEKS.node.bantuan}
       </p>
     </Card>
   );

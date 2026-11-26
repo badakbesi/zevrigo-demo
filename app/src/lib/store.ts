@@ -7,15 +7,20 @@ import {
   type InfoAplikasi,
   type KeadaanNode,
   type KeadaanTambang,
+  type ModeAplikasi,
   type Pengaturan,
   type Tema,
 } from './backend';
+import { keGalat, simpanTemaLokal } from './vps';
 
 const MAKS_BARIS_LOG = 500;
 
 export type SaringLog = 'semua' | 'node' | 'penambang';
 
 interface AppState {
+  mode: ModeAplikasi;
+  /** Pesan bila backend tidak menjawab (mode VPS: VPS tidak tersambung); `null` bila normal. */
+  galatSambung: string | null;
   info: InfoAplikasi;
   pengaturanDimuat: boolean;
   pengaturan: Pengaturan;
@@ -31,7 +36,8 @@ interface AppState {
   waktuLogTerakhir: number | null;
   saringLog: SaringLog;
 
-  inisialisasi: () => Promise<() => void>;
+  aturMode: (mode: ModeAplikasi) => void;
+  inisialisasi: (intervalMs?: number) => Promise<() => void>;
   segarkanKeadaan: () => Promise<void>;
   tutupSpanduk: () => void;
   ubahTema: (tema: Tema) => Promise<void>;
@@ -50,7 +56,7 @@ interface AppState {
 
 let urutanPeriksaAlamat = 0;
 
-function terapkanTemaDokumen(tema: Tema): void {
+export function terapkanTemaDokumen(tema: Tema): void {
   if (typeof document === 'undefined') {
     return;
   }
@@ -63,6 +69,8 @@ function terapkanTemaDokumen(tema: Tema): void {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
+  mode: 'desktop',
+  galatSambung: null,
   info: { versi: '0.1.0', versiNode: '' },
   pengaturanDimuat: false,
   pengaturan: {
@@ -99,34 +107,49 @@ export const useAppStore = create<AppState>((set, get) => ({
   waktuLogTerakhir: null,
   saringLog: 'semua',
 
-  async inisialisasi(): Promise<() => void> {
-    const [info, pengaturan] = await Promise.all([
-      backend.info(),
-      backend.muatPengaturan(),
-    ]);
+  aturMode(mode: ModeAplikasi): void {
+    set({ mode });
+  },
 
-    terapkanTemaDokumen(pengaturan.tema);
-    set({
-      info,
-      pengaturan,
-      pengaturanDimuat: true,
-    });
+  async inisialisasi(intervalMs = 1000): Promise<() => void> {
+    // Mode VPS: VPS bisa belum terjangkau saat dibuka; pengaturan dicoba lagi pada setiap putaran sampai berhasil.
+    const muatAwal = async (): Promise<void> => {
+      try {
+        const [info, pengaturan] = await Promise.all([
+          backend.info(),
+          backend.muatPengaturan(),
+        ]);
 
-    if (pengaturan.alamatHadiah.trim().length > 0) {
-      const cekAwal = periksaAlamatAwal(pengaturan.alamatHadiah);
-      if (cekAwal.sah) {
-        const hasil = await backend.periksaAlamat(pengaturan.alamatHadiah);
-        set({ hasilAlamat: hasil });
-      } else {
-        set({ hasilAlamat: cekAwal });
+        terapkanTemaDokumen(pengaturan.tema);
+        set({
+          info,
+          pengaturan,
+          pengaturanDimuat: true,
+        });
+
+        if (pengaturan.alamatHadiah.trim().length > 0) {
+          const cekAwal = periksaAlamatAwal(pengaturan.alamatHadiah);
+          if (cekAwal.sah) {
+            const hasil = await backend.periksaAlamat(pengaturan.alamatHadiah);
+            set({ hasilAlamat: hasil });
+          } else {
+            set({ hasilAlamat: cekAwal });
+          }
+        }
+      } catch (e) {
+        set({ galatSambung: keGalat(e).pesan });
       }
-    }
+    };
 
+    await muatAwal();
     await get().segarkanKeadaan();
 
     const intervalId = setInterval(() => {
+      if (!get().pengaturanDimuat) {
+        void muatAwal();
+      }
       void get().segarkanKeadaan();
-    }, 1000);
+    }, intervalMs);
 
     let mediaQuery: MediaQueryList | null = null;
     const tanganiMedia = (): void => {
@@ -176,11 +199,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async segarkanKeadaan(): Promise<void> {
     const sejak = get().waktuLogTerakhir;
-    const [node, tambang, barisBaru] = await Promise.all([
-      backend.keadaanNode(),
-      backend.keadaanTambang(),
-      backend.logTerbaru(sejak),
-    ]);
+    let hasil: [KeadaanNode, KeadaanTambang, BarisLog[]];
+    try {
+      hasil = await Promise.all([
+        backend.keadaanNode(),
+        backend.keadaanTambang(),
+        backend.logTerbaru(sejak),
+      ]);
+    } catch (e) {
+      set({ galatSambung: keGalat(e).pesan });
+      return;
+    }
+    const [node, tambang, barisBaru] = hasil;
 
     set((state) => {
       let logGabungan = state.log;
@@ -200,6 +230,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         tambang,
         log: logGabungan,
         waktuLogTerakhir: waktuTerakhir,
+        galatSambung: null,
       };
     });
   },
@@ -210,6 +241,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async ubahTema(tema: Tema): Promise<void> {
     terapkanTemaDokumen(tema);
+    if (get().mode === 'vps') {
+      simpanTemaLokal(tema);
+    }
     const baru: Pengaturan = { ...get().pengaturan, tema };
     set({ pengaturan: baru });
     if (get().pengaturanDimuat) {
@@ -267,6 +301,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await backend.nyalakanNode();
       await get().segarkanKeadaan();
+    } catch (e) {
+      set({ galatSambung: keGalat(e).pesan });
     } finally {
       set({ sedangProsesNode: false });
     }
@@ -280,6 +316,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       await backend.hentikanNode();
       await get().segarkanKeadaan();
+    } catch (e) {
+      set({ galatSambung: keGalat(e).pesan });
     } finally {
       set({ sedangProsesNode: false });
     }
@@ -303,6 +341,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await backend.berhentiTambang();
       await get().segarkanKeadaan();
+    } catch (e) {
+      set({ galatSambung: keGalat(e).pesan });
     } finally {
       set({ sedangProsesTambang: false });
     }

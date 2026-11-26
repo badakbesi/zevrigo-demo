@@ -11,7 +11,8 @@ use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 use zeroize::Zeroizing;
 
-use super::sesi::{Galat, Masuk, Sesi};
+use super::kendali::SKRIP_BANTU;
+use super::sesi::{Galat, Keluaran, Masuk, Sesi};
 
 /// Rilis resmi paket VPS (tag tetap `demo-zevrigo-vps`, DEC-46).
 pub const RILIS: &str =
@@ -314,19 +315,7 @@ pub async fn pasang_baru(
     .await?
     .wajib_berhasil()?;
     let jalan = format!("bash \"$HOME/{BERKAS_PASANG}\" {token_sha256} {PAKET_SHA256}");
-    let (baris, masukan) = if sesi.root() {
-        (jalan, None)
-    } else {
-        let sandi =
-            sandi_sudo.ok_or_else(|| Galat::Masukan("password sudo dibutuhkan".to_owned()))?;
-        if sandi.is_empty() || sandi.contains(['\n', '\r']) {
-            return Err(Galat::Masukan("password sudo tidak sah".to_owned()));
-        }
-        (
-            format!("sudo -S -p '' {jalan}"),
-            Some(Zeroizing::new(format!("{sandi}\n"))),
-        )
-    };
+    let (baris, masukan) = dengan_sudo(sesi, sandi_sudo, &jalan)?;
     let hasil = sesi
         .jalankan(
             &baris,
@@ -337,7 +326,37 @@ pub async fn pasang_baru(
     // Skrip menghapus dirinya sendiri; bila sudo gagal, skrip tidak berjalan dan dihapus di sini.
     let hapus = format!("rm -f \"$HOME/{BERKAS_PASANG}\"");
     let _ = sesi.jalankan(&hapus, None, Duration::from_secs(30)).await;
-    let keluaran = hasil?;
+    let keluaran = periksa_sudo(hasil?)?.wajib_berhasil()?;
+    Ok(keluaran
+        .teks()
+        .lines()
+        .rev()
+        .find(|b| b.starts_with("terpasang: "))
+        .unwrap_or("terpasang")
+        .to_owned())
+}
+
+/// Baris perintah sebagai root: langsung bila pengguna SSH root, selain itu `sudo -S` dengan password pengguna di stdin.
+fn dengan_sudo(
+    sesi: &Sesi,
+    sandi_sudo: Option<&str>,
+    perintah: &str,
+) -> Result<(String, Option<Zeroizing<String>>), Galat> {
+    if sesi.root() {
+        return Ok((perintah.to_owned(), None));
+    }
+    let sandi = sandi_sudo.ok_or_else(|| Galat::Masukan("password sudo dibutuhkan".to_owned()))?;
+    if sandi.is_empty() || sandi.contains(['\n', '\r']) {
+        return Err(Galat::Masukan("password sudo tidak sah".to_owned()));
+    }
+    Ok((
+        format!("sudo -S -p '' {perintah}"),
+        Some(Zeroizing::new(format!("{sandi}\n"))),
+    ))
+}
+
+/// Galat sudo yang dikenal menjadi pesan untuk pengguna.
+fn periksa_sudo(keluaran: Keluaran) -> Result<Keluaran, Galat> {
     if !keluaran.berhasil() {
         let galat = String::from_utf8_lossy(&keluaran.stderr);
         if galat.contains("incorrect password") || galat.contains("Sorry, try again") {
@@ -349,14 +368,35 @@ pub async fn pasang_baru(
             ));
         }
     }
-    let keluaran = keluaran.wajib_berhasil()?;
-    Ok(keluaran
-        .teks()
-        .lines()
-        .rev()
-        .find(|b| b.starts_with("terpasang: "))
-        .unwrap_or("terpasang")
-        .to_owned())
+    Ok(keluaran)
+}
+
+/// VPS yang sudah terpasang Zevrigo Node (aplikasi dipasang ulang, HP baru tanpa data lama, atau kata sandi aplikasi lupa):
+/// token pengendali diganti dengan token HP ini lewat skrip bantu (sudo dengan password pengguna, atau langsung bila root).
+/// Node, penambang, dan data chain tidak disentuh.
+///
+/// # Errors
+///
+/// [`Galat::Masukan`] (SHA-256 token tidak sah, password sudo salah), [`Galat::Perintah`], galat sambungan.
+pub async fn ambil_alih(
+    sesi: &Sesi,
+    sandi_sudo: Option<&str>,
+    token_sha256: &str,
+) -> Result<(), Galat> {
+    if !hex64(token_sha256) {
+        return Err(Galat::Masukan("SHA-256 token tidak sah".to_owned()));
+    }
+    let perintah = format!("{SKRIP_BANTU} token {token_sha256}");
+    let (baris, masukan) = dengan_sudo(sesi, sandi_sudo, &perintah)?;
+    let keluaran = sesi
+        .jalankan(
+            &baris,
+            masukan.as_ref().map(|s| s.as_bytes()),
+            Duration::from_secs(60),
+        )
+        .await?;
+    periksa_sudo(keluaran)?.wajib_berhasil()?;
+    Ok(())
 }
 
 /// Memasang kunci publik aplikasi di authorized_keys pengguna SSH (tanpa sudo; tidak menggandakan baris yang sama).

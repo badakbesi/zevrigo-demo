@@ -1,18 +1,55 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { KartuLog } from './components/KartuLog';
 import { KartuNode } from './components/KartuNode';
 import { KartuTambang } from './components/KartuTambang';
 import { Kepala } from './components/Kepala';
-import { simulasikanGalatNodeDev } from './lib/backend';
+import { AppVps } from './components/vps/AppVps';
+import { ErrorBox } from './components/ui';
+import {
+  aturBackend,
+  deteksiMode,
+  simulasikanGalatNodeDev,
+  type ModeAplikasi,
+} from './lib/backend';
 import { useAppStore } from './lib/store';
 import { TEKS } from './lib/teks';
+import { ambilVpsApi, createVpsBackend } from './lib/vps';
 
+/** Mode dipilih saat aplikasi mulai: desktop (node di komputer ini) atau VPS (Android, node di VPS pengguna). */
 export default function App() {
+  const [mode, setMode] = useState<ModeAplikasi | null>(null);
+
+  useEffect(() => {
+    let dibatalkan = false;
+    void deteksiMode().then((m) => {
+      if (dibatalkan) {
+        return;
+      }
+      if (m === 'vps') {
+        aturBackend(createVpsBackend(ambilVpsApi()));
+      }
+      useAppStore.getState().aturMode(m);
+      setMode(m);
+    });
+    return () => {
+      dibatalkan = true;
+    };
+  }, []);
+
+  if (mode === null) {
+    return <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />;
+  }
+  return mode === 'vps' ? <AppVps /> : <AppDesktop />;
+}
+
+function AppDesktop() {
   const inisialisasi = useAppStore((s) => s.inisialisasi);
   const sedangMenutup = useAppStore((s) => s.sedangMenutup);
   const bukaTautan = useAppStore((s) => s.bukaTautan);
   const segarkanKeadaan = useAppStore((s) => s.segarkanKeadaan);
+  const galatSambung = useAppStore((s) => s.galatSambung);
+  const salinTeks = useAppStore((s) => s.salinTeks);
 
   useEffect(() => {
     let berhenti: (() => void) | undefined;
@@ -47,6 +84,9 @@ export default function App() {
       <Kepala />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-3 space-y-3">
+        {galatSambung && (
+          <ErrorBox pesan={galatSambung} detail={null} onSalinDetail={salinTeks} />
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
           <KartuNode />
           <KartuTambang />

@@ -8,17 +8,27 @@
 //! Tidak ada perintah bebas dari antarmuka. Sidik kunci host dipercaya pada sambungan pertama, lalu wajib sama
 //! ([`Galat::SidikBerubah`]). Paket VPS yang boleh dipasang tertanam di aplikasi ([`PAKET_SHA256`], pencipta 25 November 2026).
 //! Modul ini hanya ada dengan fitur `vps` (build Android dan uji `examples/uji-vps.rs`); program desktop tidak memuatnya.
+//!
+//! Q199b: [`Layanan`] menyatukan semuanya untuk aplikasi: tahap (buat kata sandi, sambung, pasang, amankan, terkunci, siap),
+//! brankas kata sandi aplikasi di HP (Argon2id + XChaCha20-Poly1305, `vault` MOD-09), dan satu sambungan SSH bersama.
 
+mod aplikasi;
+mod brankas;
 mod kendali;
 mod pasang;
 mod rpc;
 mod sesi;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_layanan;
+
+pub use aplikasi::{BERKAS_BRANKAS, InfoLayanan, Layanan, PerintahUi, Tahap};
+pub use brankas::{SANDI_MAKS, SANDI_MIN};
 
 pub use kendali::{Kendali, SKRIP_BANTU, StatusVps};
 pub use pasang::{
-    Kunci, PAKET, PAKET_SHA256, PemeriksaanVps, RILIS, buat_token, pasang_baru,
+    Kunci, PAKET, PAKET_SHA256, PemeriksaanVps, RILIS, ambil_alih, buat_token, pasang_baru,
     pasang_kunci_publik, periksa_vps, sha256_hex,
 };
 pub use rpc::METODE;

@@ -129,13 +129,43 @@ function createTauriBackend(): Backend {
 }
 
 /** `true` bila berjalan di jendela Tauri (bukan browser `npm run dev` atau test). */
-function diTauri(): boolean {
+export function diTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+/** `desktop`: node dan penambang di komputer ini. `vps` (Android, fitur Cargo `vps`): node di VPS pengguna (src/lib/vps.ts). */
+export type ModeAplikasi = 'desktop' | 'vps';
+
+/** Mode dari aplikasi (`mode_aplikasi`); di browser `?mode=vps` memakai tiruan mode VPS. */
+export async function deteksiMode(): Promise<ModeAplikasi> {
+  if (diTauri()) {
+    try {
+      return (await invoke<string>('mode_aplikasi')) === 'vps' ? 'vps' : 'desktop';
+    } catch {
+      return 'desktop';
+    }
+  }
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'vps') {
+    return 'vps';
+  }
+  return 'desktop';
 }
 
 const mockInstansi: MockBackendKontrol | null = diTauri() ? null : createMockBackend();
 
-export const backend: Backend = mockInstansi ?? createTauriBackend();
+let aktif: Backend = mockInstansi ?? createTauriBackend();
+
+/** Mengganti backend aktif (mode VPS memasang `createVpsBackend`, src/lib/vps.ts). */
+export function aturBackend(baru: Backend): void {
+  aktif = baru;
+}
+
+/** Backend aktif. Semua pemanggil memakai objek ini, sehingga mode bisa dipilih saat aplikasi mulai. */
+export const backend: Backend = new Proxy({} as Backend, {
+  get(_sasaran, nama: string | symbol) {
+    return Reflect.get(aktif, nama);
+  },
+});
 
 export const simulasikanGalatNodeDev: (() => Promise<void>) | null =
   import.meta.env.DEV && mockInstansi !== null ? () => mockInstansi.simulasikanGalatNode() : null;

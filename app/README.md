@@ -14,6 +14,12 @@ dan tidak menyimpan kunci rahasia. RENCANA_T16, DEC-44.
   SSH ke VPS pengguna (russh + ring), sidik kunci host dipercaya pertama kali lalu dikunci, pemasangan paket VPS resmi
   `demo-zevrigo-vps` (SHA-256 tertanam di aplikasi), skrip bantu `demo-zevrigo-kendali` dengan perintah tetap, dan JSON-RPC
   pengendali lewat terowongan SSH. Uji sungguhan ke VPS: `cargo run --features vps --example uji-vps` (masukan `ZVRG_UJI_*`).
+- Mode VPS di antarmuka (Q199b): build dengan fitur `vps` menjawab `mode_aplikasi` = `vps`, lalu antarmuka memakai
+  `src/lib/vps.ts` (perintah `vps_*` di `src-tauri/src/perintah_vps.rs`) dan layar `src/components/vps` (kata sandi aplikasi,
+  sambung, pasang, amankan, terkunci, lalu kartu node/menambang/log ditambah saldo, VPS, pemeliharaan, akses). Kata sandi
+  aplikasi paling sedikit 8 karakter; brankas `vps-brankas.json` di folder data aplikasi (Argon2id + XChaCha20-Poly1305,
+  vault MOD-09). Di browser: `npm run dev`, buka `http://127.0.0.1:1420/?mode=vps` (tiruan, tanpa VPS). Uji layanan
+  sungguhan: `cargo run --features vps --example uji-layanan`.
 
 ```bash
 npm ci --ignore-scripts && npm run check      # antarmuka

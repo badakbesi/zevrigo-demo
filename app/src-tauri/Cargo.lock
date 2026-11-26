@@ -6673,6 +6673,7 @@ dependencies = [
  "tokio",
  "zeroize",
  "zevrigo-node-mesin",
+ "zevrigo-wallet-core",
 ]
 
 [[package]]

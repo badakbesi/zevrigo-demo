@@ -23,6 +23,12 @@ pub struct InfoAplikasi {
     versi_node: String,
 }
 
+/// `mode_aplikasi`: `desktop` (node dan penambang di komputer ini). Build fitur `vps` (Android) menjawab `vps`.
+#[tauri::command]
+pub fn mode_aplikasi() -> &'static str {
+    "desktop"
+}
+
 /// Menjalankan `job` di utas sendiri.
 async fn run_blocking<T, F>(job: F) -> Hasil<T>
 where

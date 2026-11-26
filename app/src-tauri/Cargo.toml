@@ -41,16 +41,33 @@ getrandom = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true }
+# Brankas kata sandi aplikasi (Q199b): vault MOD-09 (Argon2id + XChaCha20-Poly1305), sama dengan Zevrigo Wallet; paket ini sudah
+# ada di Cargo.lock lewat mesin.
+zevrigo-wallet-core = { workspace = true, optional = true }
 
 [features]
 # Modul `vps` (src/vps): SSH ke VPS pengguna, skrip bantu demo-zevrigo-kendali, terowongan ke pengendali. Dipakai build Android
 # (Q199c) dan uji sungguhan `examples/uji-vps.rs` (Q199a).
-vps = ["dep:russh", "dep:tokio", "dep:getrandom", "dep:sha2", "dep:hex", "dep:zeroize"]
+vps = [
+    "dep:russh",
+    "dep:tokio",
+    "dep:getrandom",
+    "dep:sha2",
+    "dep:hex",
+    "dep:zeroize",
+    "dep:zevrigo-wallet-core",
+]
 
 # Uji sungguhan modul vps dari PC ke VPS (q199a_uji.sh pencipta); hanya dengan fitur vps.
 [[example]]
 name = "uji-vps"
 path = "examples/uji-vps.rs"
+required-features = ["vps"]
+
+# Uji sungguhan layanan VPS aplikasi (brankas, tahap, ambil alih) dari PC ke VPS (q199b_uji.sh pencipta); hanya dengan fitur vps.
+[[example]]
+name = "uji-layanan"
+path = "examples/uji-layanan.rs"
 required-features = ["vps"]
 
 [lints.rust]
@@ -86,6 +103,8 @@ serde = { version = "1.0.229", default-features = false, features = ["std", "der
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 # Mesin di repo ini (folder zevrigo-demo/mesin); crate inti di dalamnya dari repo `zevrigo` di folder sebelah (AGENDA P3).
 zevrigo-node-mesin = { path = "../../mesin" }
+# Crate inti di repo `zevrigo` folder sebelah, jalur sama dengan mesin (satu paket di Cargo.lock).
+zevrigo-wallet-core = { path = "../../../zevrigo/crates/wallet-core" }
 # DEC-46 (pencipta 25 November 2026): SSH untuk Android = russh + ring, tanpa fitur bawaan (tanpa aws-lc-rs, flate2, RSA).
 russh = { version = "=0.65.4", default-features = false, features = ["ring"] }
 # Versi yang sudah ada di Cargo.lock (sama dengan wallet MOD-15).
