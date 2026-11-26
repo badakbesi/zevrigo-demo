@@ -21,6 +21,12 @@ dan tidak menyimpan kunci rahasia. RENCANA_T16, DEC-44.
   vault MOD-09). Di browser: `npm run dev`, buka `http://127.0.0.1:1420/?mode=vps` (tiruan, tanpa VPS). Uji layanan
   sungguhan: `cargo run --features vps --example uji-layanan`.
 
+- APK Android (Q199c): `tauri.android.conf.json` mengosongkan sidecar (node dan penambang ada di VPS, bukan di HP); pustaka
+  `zevrigo_node_app_lib` juga cdylib. Tanpa fitur `vps` build Android ditolak (`compile_error!`). Proyek `src-tauri/gen/android`
+  dibuat `npm run tauri -- android init --ci` (tidak di git; diarsip di zevrigo_lab/arsip), ikon peluncur logo resmi dari proyek
+  Android wallet. APK: `npm run tauri -- android build --apk --target aarch64 armv7 --features vps` (versionCode 1000 untuk 0.1.0),
+  ditandatangani dengan kunci rilis yang sama dengan Zevrigo Wallet dan Zevrigo Explorer.
+
 ```bash
 npm ci --ignore-scripts && npm run check      # antarmuka
 make app-check                                 # dari akar repo: fmt, clippy, larangan, test Rust (butuh sidecar)

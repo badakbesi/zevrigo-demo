@@ -7,9 +7,18 @@
 //! rahasia wallet: hadiah tambang ke alamat Zevrigo Wallet yang ditempel pengguna.
 //!
 //! Android (fitur `vps`, RENCANA_T17, DEC-46): node dan penambang di VPS pengguna, dikendalikan lewat SSH (`vps`,
-//! perintah IPC di `perintah_vps`). Kunci SSH dan token pengendali disimpan di HP dalam brankas kata sandi aplikasi.
+//! perintah IPC di `perintah_vps`). Kunci SSH dan token pengendali disimpan di HP dalam brankas kata sandi aplikasi. Titik
+//! masuk Android adalah [`run`] (atribut `tauri::mobile_entry_point`); APK dibangun dengan
+//! `npm run tauri -- android build --apk --target aarch64 armv7 --features vps` (Q199c), tanpa sidecar
+//! (`tauri.android.conf.json`).
 
 #![forbid(unsafe_code)]
+
+// Android hanya mode VPS: tanpa fitur `vps` aplikasi akan mencari sidecar node yang tidak ada di HP.
+#[cfg(all(target_os = "android", not(feature = "vps")))]
+compile_error!(
+    "Zevrigo Node untuk Android dibangun dengan fitur vps: npm run tauri -- android build --features vps"
+);
 
 #[cfg(not(feature = "vps"))]
 mod perintah;
@@ -155,4 +164,13 @@ pub fn try_run() -> Result<(), tauri::Error> {
             perintah_vps::buka_tautan,
         ])
         .run(tauri::generate_context!())
+}
+
+/// Titik masuk aplikasi Android (dan pemanggilan dari desktop tanpa kode keluar): seperti [`try_run`], galat dicatat ke
+/// stderr (logcat di Android). Pola wallet MOD-15 dan aplikasi Explorer.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    if let Err(error) = try_run() {
+        eprintln!("zevrigo-node-app: {error}");
+    }
 }

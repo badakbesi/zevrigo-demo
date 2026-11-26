@@ -12,10 +12,12 @@ license = "MIT OR Apache-2.0"
 description = "Zevrigo Node: aplikasi node dan penambang jaringan demo regtest (Tauri 2, sidecar zevrigo-node dan zevrigo-miner)"
 
 # Nama berbeda dari program agar berkas hasil build tidak bentrok di Windows (pola MOD-15). Program tidak bernama zevrigo-node
-# karena nama itu dipakai sidecar node di folder yang sama.
+# karena nama itu dipakai sidecar node di folder yang sama. Q199c: pustaka juga untuk Android (Tauri mobile memuat cdylib lewat
+# JNI; staticlib untuk iOS nanti), sama dengan wallet MOD-15 dan aplikasi Explorer.
 [lib]
 name = "zevrigo_node_app_lib"
 path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
 name = "zevrigo-node-app"
