@@ -1,57 +1,62 @@
-# Explorer dan seed P2P publik lewat Cloudflare Tunnel (TSK-M44, TSK-M45, TSK-M46, TSK-M47, Spesifikasi Docker v0.1 Bagian 7).
-# Dipakai bersama compose.yaml, di DUA mesin (TSK-M65, DEC-38). Setiap layanan punya profile mesinnya; tanpa
-# COMPOSE_PROFILES tidak ada layanan publik yang dinyalakan, jadi seed dan tunnel tidak pernah hidup di dua tempat:
+# Layanan publik jaringan demo regtest lewat Cloudflare Tunnel (TSK-M44 sampai TSK-M47, TSK-M53, TSK-M54, Spesifikasi Docker
+# v0.1 Bagian 7). Dipakai bersama compose.yaml. Setiap layanan punya profile; tanpa COMPOSE_PROFILES tidak ada layanan publik
+# yang dinyalakan:
 #
-#   VPS: COMPOSE_PROFILES=vps docker compose -f compose.yaml -f compose.publik.yaml up -d --no-build
-#        seed (node), explorer, gerbang-rpc, penambang-cadangan, cloudflared, node-faucet + faucet, node-pengamat
-#   PC:  COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d
-#        node-penambang + miner-berkala, node-treasury (kunci kantong treasury tidak di VPS)
-#   berhenti: COMPOSE_PROFILES=<vps|pc> docker compose -f compose.yaml -f compose.publik.yaml stop
+#   demo  SUSUNAN VPS RESMI (TSK-M76, DEC-47): sama persis di SETIAP VPS resmi Zevrigo, tanpa versi per lokasi:
+#         node (seed), node-pengamat, explorer, gerbang-rpc, node-faucet + faucet, penambang-cadangan, cloudflared-zevrigo
+#   pc    komputer pencipta: node-penambang + miner-berkala, node-treasury (kunci kantong treasury tidak pernah di VPS)
+#   lama  tunnel lama *.ratuaurion.store (layanan cloudflared): SEMENTARA, hanya di VPS resmi pertama, sampai dihentikan
+#         (DEC-42, paling cepat 23 Desember 2026); sesudah itu layanan dan profile ini dihapus
 #
-# Image zevrigo:regtest dibangun di PC (VPS 1 vCPU) lalu dikirim dengan docker save/load. Node di PC tersambung ke seed
-# VPS lewat alamat publik di bawah, sama seperti peserta. PC mati: tidak ada blok baru (miner-berkala di PC), layanan
-# publik tetap menjawab.
+# VPS resmi: berkas ini dan compose.yaml disalin apa adanya (scripts/vps-resmi-pasang.sh) ke ~/zevrigo, dan semua pilihan dibaca
+# dari ~/zevrigo/.env (contoh scripts/vps-resmi.env.contoh: COMPOSE_FILE, COMPOSE_PROFILES, ZVRG_HOST_SEED, ZVRG_DIAM). Perintahnya
+# sama di setiap VPS:
+#   cd ~/zevrigo && docker compose up -d --no-build        (berhenti: docker compose stop)
+# Yang memang berbeda antar-VPS hanya token tunnel (~/.zevrigo.env), nama host seed VPS itu (ZVRG_HOST_SEED, karena setiap seed
+# punya PeerId sendiri), jeda penambang cadangan (ZVRG_DIAM, agar dua VPS tidak menambang bersamaan), dan isi volume data.
+# Pemeriksaan keseragaman: scripts/vps-resmi-periksa.sh (membandingkan ~/zevrigo/VERSI dan keadaan setiap VPS).
 #
-# Token tunnel TIDAK disimpan di repo. File ${HOME}/.zevrigo-tunnel.env (izin 600) berisi satu baris: TUNNEL_TOKEN= lalu
-# token dari dasbor Cloudflare Zero Trust (Networks, Tunnels). Public hostname (route "Published application") tunnel,
-# semuanya tipe HTTP:
-#   zevrigo.ratuaurion.store       -> localhost:28802   explorer
-#   zevrigo-seed.ratuaurion.store  -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare)
-#   zevrigo-rpc.ratuaurion.store   -> localhost:28804   gerbang RPC wallet peserta (gerbang-rpc, TSK-M53)
-#   zevrigo-faucet.ratuaurion.store -> node-faucet:28805 faucet demo (faucet, TSK-M54), lewat jaringan Docker
-# Tunnel kedua "zevrigo" (Q187, pencipta 22 November 2026; akun Cloudflare domain zevrigo.online), layanan
-# cloudflared-zevrigo, token di ${HOME}/.zevrigo.env (izin 600, baris TUNNEL_TOKEN=). Route sama, tipe HTTP:
-#   demo-explorer.zevrigo.online    -> localhost:28802   explorer
-#   demo-seed-p2p.zevrigo.online    -> localhost:28803   seed P2P WebSocket
-#   demo-gerbang-rpc.zevrigo.online -> localhost:28804   gerbang RPC
-#   demo-faucet.zevrigo.online      -> node-faucet:28805 faucet
-# Tunnel lama (*.ratuaurion.store) tetap jalan paralel: wallet 0.3.1 dan Explorer 0.1.0 memakai host lama (RENCANA_T13).
-# Blog resmi tidak lagi di VPS (Q186, pencipta 22 November 2026): situs utama https://zevrigo.online di Cloudflare, dibangun
-# otomatis dari GitHub badakbesi/zevrigo-blog. Layanan blog, folder ~/zevrigo/blog, dan route zevrigo-blog.ratuaurion.store dihapus.
-# Node lain bergabung dengan --seed-resmi (Q191, DEC-43: seed bawaan node sejak repo inti b710885, alamat dan PeerId di
-# dalam node), atau dengan alamat lengkap:
+# PC:  COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d
+#
+# Image zevrigo:regtest dibangun di PC (docker compose ... build node) lalu dikirim ke VPS dengan docker save/load; ID image sama
+# di semua mesin. Node di PC tersambung ke seed lewat alamat publik, sama seperti peserta. PC mati: tidak ada blok dari
+# miner-berkala; penambang-cadangan di VPS menambang bila chain diam ZVRG_DIAM detik; layanan publik tetap menjawab.
+#
+# Token tunnel TIDAK disimpan di repo. Setiap VPS resmi punya tunnel Cloudflare sendiri (akun domain zevrigo.online, layanan
+# cloudflared-zevrigo); token di ${HOME}/.zevrigo.env (izin 600, satu baris TUNNEL_TOKEN=). Route ("Published application"),
+# semuanya tipe HTTP, sama di setiap tunnel; nama host berakhiran -<lokasi> untuk VPS kedua dan berikutnya:
+#   demo-explorer[-eu].zevrigo.online    -> localhost:28802   explorer
+#   demo-seed-p2p[-eu].zevrigo.online    -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare) = ZVRG_HOST_SEED
+#   demo-gerbang-rpc[-eu].zevrigo.online -> localhost:28804   gerbang RPC wallet peserta (TSK-M53)
+#   demo-faucet[-eu].zevrigo.online      -> node-faucet:28805 faucet demo (TSK-M54), lewat jaringan Docker
+# Tunnel lama (profile lama, ${HOME}/.zevrigo-tunnel.env): zevrigo, zevrigo-seed, zevrigo-rpc, zevrigo-faucet .ratuaurion.store,
+# tujuan sama; dipakai wallet 0.3.1 dan Explorer 0.1.0 (RENCANA_T13). Blog resmi tidak di VPS (Q186): https://zevrigo.online.
+#
+# Node lain bergabung dengan --seed-resmi (Q191, DEC-43: seed bawaan node, alamat dan PeerId di dalam node), atau dengan alamat:
 #   --connect /dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/<PeerId seed>
-# PeerId seed tercetak di log node sebagai baris p2p-ws: (kunci tetap di volume data). Seed mengumumkan alamat itu ke rekan
-# lewat pertukaran alamat (--p2p-publik, TSK-M75); setiap node menyimpan buku alamat di /data/regtest/peers.json (TSK-M74).
+# PeerId seed tercetak di log node sebagai baris p2p-ws: (kunci tetap di volume data). Setiap seed mengumumkan alamatnya ke rekan
+# (--p2p-publik, TSK-M75) dan juga memakai --seed-resmi, sehingga seed resmi saling tersambung; alamat seed miliknya sendiri di
+# daftar bawaan tidak menghasilkan rekan. Buku alamat di /data/regtest/peers.json (TSK-M74).
 #
 # Explorer mendengar di 127.0.0.1 (bawaan) di dalam namespace jaringan node. Satu-satunya jalan masuk dari luar adalah
-# cloudflared yang berbagi namespace itu, sehingga --trust-proxy aman (TSK-M43). Port host dari compose.yaml dicabut;
-# RPC dan P2P TCP node tetap tidak terbuka; P2P WebSocket hanya di 127.0.0.1:28803 dan dicapai lewat cloudflared. Project
-# terpisah (zevrigo-publik), jadi volume datanya terpisah dari compose.yaml biasa. Saat ini regtest (uji, pilihan
-# pencipta 11 November 2026); testnet menyusul bersama genesis testnet (TSK-F06).
+# cloudflared yang berbagi namespace itu, sehingga --trust-proxy aman (TSK-M43). Port host dari compose.yaml dicabut; RPC dan
+# P2P TCP node tidak terbuka; P2P WebSocket hanya di 127.0.0.1:28803 dan dicapai lewat cloudflared. Project zevrigo-publik,
+# volume sendiri (zevrigo-publik_zvrg-data, ...). Saat ini regtest (pilihan pencipta 11 November 2026); testnet menyusul
+# bersama genesis testnet (TSK-F06).
 #
-# Jaringan demo regtest (DEC-34, TSK-M47): 4 node operator lain, masing-masing di container dan volume sendiri, tersambung
-# ke seed resmi bawaan (--seed-resmi, Q191) lewat alamat publik di atas (lewat internet dan Cloudflare, seperti peserta). Mereka memakai 4 dari 32 slot masuk
-# seed. Tanpa port host; batas 256 MiB dan 0,5 CPU per node (terukur Q125: node sekitar 10 MiB, node baru sinkron 8 detik).
-#   node-penambang  tempat miner-berkala      node-treasury  wallet treasury (operator)
-#   node-faucet     layanan faucet (TSK-M54)   node-pengamat  hanya menerima siaran
+# Batas sumber daya sama di setiap VPS (TSK-M76): seed 384 MiB / 1 CPU; explorer, node lain, gerbang RPC, faucet 256 MiB /
+# 0,5 CPU; penambang cadangan 128 MiB / 0,5 CPU (terukur Q125: node sekitar 10 MiB, node baru sinkron 8 detik).
+#
+# Jaringan demo (DEC-34, TSK-M47): node operator di container dan volume sendiri, tersambung ke seed resmi bawaan lewat alamat
+# publik (internet dan Cloudflare, seperti peserta):
+#   node-penambang  tempat miner-berkala (PC)      node-treasury  wallet treasury (PC)
+#   node-faucet     layanan faucet (setiap VPS)    node-pengamat  hanya menerima siaran, saksi (setiap VPS)
 #
 # faucet (TSK-M54 bagian B): zevrigo-demo mode faucet di namespace node-faucet, wallet panas regtest di volume sendiri
-# (zvrg-faucet-dompet: faucet-frasa.txt dan faucet-batas.json). Diisi ulang bertahap dari kantong Faucet treasury:
+# (zvrg-faucet-dompet: faucet-frasa.txt dibuat sekali dan faucet-batas.json); setiap VPS punya wallet panas sendiri. Halaman
+# /faucet/ setiap explorer memanggil faucet utama (--faucet-origin di bawah). Diisi ulang bertahap dari kantong Faucet treasury:
 #   COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml exec node-treasury zevrigo-cli --datadir /data send \
 #     --dari <alamat kantong Faucet> --to <alamat faucet dari log: alamat faucet:> --amount 10000
-# Seed dengan PeerId lain (misalnya volume seed baru) = node versi baru dengan daftar seed resmi baru (DEC-43); variabel
-# ZVRG_SEED tidak dipakai lagi sejak Q191.
 #
 # miner-berkala (TSK-M46, TSK-M47): satu blok regtest setiap ZVRG_JEDA detik (bawaan 120 = waktu blok target), di namespace
 # node-penambang. Hadiah ke payload di /data/payout-penambang (volume node-penambang, dipasang baca saja); selama file itu
@@ -61,13 +66,17 @@ name: zevrigo-publik
 
 services:
   node:
-    profiles: ["vps"]
-    # Q191 (DEC-43, TSK-M75): seed mengumumkan alamat wss resminya ke rekan lewat pertukaran alamat (protokol addr).
-    command: ["--regtest", "--datadir", "/data", "--p2p-ws-port", "28803", "--p2p-publik", "/dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws"]
+    profiles: ["demo"]
+    # Q191 (DEC-43, TSK-M75): seed mengumumkan alamat wss resminya ke rekan lewat pertukaran alamat (protokol addr). TSK-M76:
+    # nama host dari ZVRG_HOST_SEED (~/zevrigo/.env VPS itu; bawaan seed pertama), dan --seed-resmi agar seed resmi saling
+    # tersambung (seed kedua ke seed pertama, Q204b).
+    command: ["--regtest", "--datadir", "/data", "--p2p-ws-port", "28803", "--p2p-publik", "/dns4/${ZVRG_HOST_SEED:-demo-seed-p2p.zevrigo.online}/tcp/443/tls/sni/${ZVRG_HOST_SEED:-demo-seed-p2p.zevrigo.online}/ws", "--seed-resmi"]
     ports: !reset []
+    mem_limit: 384m
+    cpus: 1.0
 
   explorer:
-    profiles: ["vps"]
+    profiles: ["demo"]
     command:
       - --regtest
       - --datadir
@@ -78,9 +87,11 @@ services:
       # TSK-M54: halaman /faucet/ boleh memanggil layanan faucet (connect-src). Q187: faucet host baru (web memanggilnya).
       - --faucet-origin
       - https://demo-faucet.zevrigo.online
+    mem_limit: 256m
+    cpus: 0.5
 
   gerbang-rpc:
-    profiles: ["vps"]
+    profiles: ["demo"]
     # TSK-M53 (DEC-36): zevrigo-demo mode rpc, di namespace node seed (RPC node lewat 127.0.0.1:28801). Hanya metode aman
     # yang diteruskan; get_block_template dan submit_block dijawab -32601. Mendengar di 127.0.0.1:28804, hanya dicapai lewat
     # cloudflared; --trust-proxy aman karena yang tersambung lewat loopback hanya proses di namespace ini.
@@ -99,9 +110,9 @@ services:
     restart: unless-stopped
 
   penambang-cadangan:
-    profiles: ["vps"]
+    profiles: ["demo"]
     # Q181 (21 November 2026, pencipta: penambang cadangan di VPS, mode cadangan, hadiah ke alamat penambang PC, pasang
-    # secepatnya): di namespace node seed (RPC 127.0.0.1:28801 bawaan zevrigo-cli dan zevrigo-miner, tidak lewat gerbang
+    # secepatnya; TSK-M76: di setiap VPS resmi, ZVRG_DIAM berbeda per VPS lewat ~/zevrigo/.env): di namespace node seed (RPC 127.0.0.1:28801 bawaan zevrigo-cli dan zevrigo-miner, tidak lewat gerbang
     # publik). Setiap 30 detik membaca tinggi chain; menambang satu blok hanya bila tinggi tidak naik selama ZVRG_DIAM detik
     # (bawaan 300), misalnya saat PC mati. Selama miner-berkala PC jalan (satu blok per 120 detik) layanan ini diam. Sesudah
     # mulai juga menunggu ZVRG_DIAM detik, agar node seed yang baru menyala sempat sinkron dulu. ZVRG_PAYOUT = payload x-only
@@ -139,12 +150,15 @@ services:
     restart: unless-stopped
 
   cloudflared:
-    profiles: ["vps"]
-    # cloudflared 2026.10.7 (Q120, 11 November 2026), image resmi Cloudflare dikunci digest (DEC-10 bagian 9).
+    profiles: ["lama"]
+    # Tunnel lama *.ratuaurion.store, SEMENTARA (profile lama, hanya VPS resmi pertama) sampai dihentikan (DEC-42, paling cepat
+    # 23 Desember 2026); lalu layanan ini dihapus. cloudflared 2026.10.7 (Q120), image resmi dikunci digest (DEC-10 bagian 9).
+    # required: false agar VPS lain (tanpa berkas ini) tetap bisa membaca compose.
     image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     command: ["tunnel", "--no-autoupdate", "run"]
     env_file:
-      - ${HOME}/.zevrigo-tunnel.env
+      - path: ${HOME}/.zevrigo-tunnel.env
+        required: false
     network_mode: "service:node"
     depends_on:
       - explorer
@@ -152,14 +166,14 @@ services:
     restart: unless-stopped
 
   cloudflared-zevrigo:
-    profiles: ["vps"]
-    # Q187 (22 November 2026, pencipta): tunnel "zevrigo" untuk host *.zevrigo.online, berdampingan dengan tunnel lama
-    # (layanan cloudflared). Image dan namespace sama dengan cloudflared: localhost = namespace node seed, dan faucet
-    # mempercayai CF-Connecting-IP dari alamat layanan node (--trust-proxy-host node). Token tidak di repo.
+    profiles: ["demo"]
+    # Q187 (22 November 2026, pencipta): tunnel untuk host *.zevrigo.online; setiap VPS resmi punya tunnel sendiri (TSK-M76),
+    # route sama (kepala berkas). localhost = namespace node seed, dan faucet mempercayai CF-Connecting-IP dari alamat layanan
+    # node (--trust-proxy-host node). Token tidak di repo.
     image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     command: ["tunnel", "--no-autoupdate", "run"]
-    # Token hanya ada di VPS; required: false agar compose profil pc (PC tanpa berkas ini) tetap terbaca. Di VPS skrip
-    # pemasangan memeriksa ~/.zevrigo.env ada (izin 600).
+    # Token hanya ada di VPS; required: false agar compose profil pc (PC tanpa berkas ini) tetap terbaca. Di VPS
+    # scripts/vps-resmi-pasang.sh memeriksa ~/.zevrigo.env ada (izin 600).
     env_file:
       - path: ${HOME}/.zevrigo.env
         required: false
@@ -225,7 +239,7 @@ services:
     restart: unless-stopped
 
   node-faucet:
-    profiles: ["vps"]
+    profiles: ["demo"]
     image: zevrigo:regtest
     pull_policy: never
     command: *node-operator
@@ -237,14 +251,14 @@ services:
     restart: unless-stopped
 
   faucet:
-    profiles: ["vps"]
+    profiles: ["demo"]
     # TSK-M54 bagian B (DEC-36): zevrigo-demo mode faucet, RPC node-faucet lewat 127.0.0.1:28801 di namespace yang sama.
     # Mendengar 0.0.0.0:28805 di jaringan Docker (tanpa port host); cloudflared (namespace node) menjangkaunya lewat
     # http://node-faucet:28805. CF-Connecting-IP hanya dipercaya dari alamat layanan node (namespace cloudflared).
     image: zevrigo:regtest
     pull_policy: never
     entrypoint: ["zevrigo-demo"]
-    # Q187: faucet dipanggil dari halaman explorer host baru dan host lama (halaman yang sama disajikan di keduanya).
+    # Q187: faucet dipanggil dari halaman explorer setiap VPS resmi dan host lama (halaman yang sama disajikan di semuanya).
     command:
       - faucet
       - --datadir
@@ -255,6 +269,8 @@ services:
       - node
       - --allow-origin
       - https://demo-explorer.zevrigo.online
+      - --allow-origin
+      - https://demo-explorer-eu.zevrigo.online
       - --allow-origin
       - https://zevrigo.ratuaurion.store
     network_mode: "service:node-faucet"
@@ -268,7 +284,7 @@ services:
     restart: unless-stopped
 
   node-pengamat:
-    profiles: ["vps"]
+    profiles: ["demo"]
     image: zevrigo:regtest
     pull_policy: never
     command: *node-operator

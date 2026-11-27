@@ -52,15 +52,21 @@ memakainya). Token disimpan di luar repo, di VPS: `~/.zevrigo.env` dan `~/.zevri
 tanpa menambang) `demo-gerbang-rpc.zevrigo.online` (lama `zevrigo-rpc`) ke `localhost:28804`, dan faucet
 `demo-faucet.zevrigo.online` (lama `zevrigo-faucet`) ke `node-faucet:28805`.
 
-Jaringan demo berjalan di dua mesin (TSK-M65, DEC-38), dipilih dengan profile compose. Tanpa `COMPOSE_PROFILES` tidak ada
-layanan publik yang dinyalakan, sehingga seed dan tunnel tidak pernah hidup di dua tempat sekaligus:
+Jaringan demo berjalan di komputer pencipta dan di VPS resmi (TSK-M65, DEC-38), dipilih dengan profile compose. Tanpa
+`COMPOSE_PROFILES` tidak ada layanan publik yang dinyalakan. **Setiap VPS resmi memakai susunan yang sama persis** (profile
+`demo`, TSK-M76, DEC-47): seed, node pengamat, explorer, gerbang RPC, faucet, penambang cadangan, dan tunnel Cloudflare VPS itu.
+Pilihan per VPS hanya di `~/zevrigo/.env` ([scripts/vps-resmi.env.contoh](scripts/vps-resmi.env.contoh)); token tunnel di
+`~/.zevrigo.env`. Susunan ini hanya untuk VPS resmi Zevrigo; operator lain bebas memakai susunannya sendiri.
 
 ```bash
 # PC (WSL): membangun image, lalu node penambang + miner-berkala dan node treasury
 docker compose -f compose.yaml -f compose.publik.yaml build node
 COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d
-# VPS (image dari PC lewat docker save/load): seed, explorer, gerbang RPC, blog, tunnel, faucet, node pengamat
-COMPOSE_PROFILES=vps docker compose -f compose.yaml -f compose.publik.yaml up -d --no-build
+# Memasang susunan ke satu VPS resmi (image dari PC lewat docker save/load lebih dulu), lalu membandingkan semua VPS resmi
+bash scripts/vps-resmi-pasang.sh zevrigo-eu
+bash scripts/vps-resmi-periksa.sh
+# Di VPS resmi mana pun
+cd ~/zevrigo && docker compose up -d --no-build
 ```
 
 RPC dan P2P TCP node tidak terbuka, explorer dan seed hanya bisa dicapai lewat tunnel, dan batas laju explorer berlaku per
