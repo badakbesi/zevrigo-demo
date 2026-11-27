@@ -13,6 +13,7 @@
 | VPS Eropa (Q206b) | dari `~/zevrigo-eu` (project `zevrigo-eu`) ke `~/zevrigo` (project `zevrigo-publik`): volume seed kedua dan pengamat kedua disalin ke nama baru, PeerId seed kedua tetap; explorer, gerbang RPC, faucet, penambang cadangan baru; route `demo-explorer-eu`, `demo-gerbang-rpc-eu`, `demo-faucet-eu` |
 | VPS pertama (Q206c) | `.env` (`demo,lama`), compose baru, `VERSI`, image lama dibersihkan (aktif + satu sebelumnya) |
 | Pemeriksaan (Q206d) | `scripts/vps-resmi-periksa.sh` = `SERAGAM`; versi Docker disamakan bila beda |
+| VPS ketiga (Q207c) | `zevrigo-roy` (`vps-roy`, tunnel `zevrigo-roy`, `ZVRG_DIAM` 540): seed ketiga, pengamat, explorer, gerbang RPC, faucet, penambang cadangan; route `demo-seed-p2p-roy`, `demo-explorer-roy`, `demo-gerbang-rpc-roy`, `demo-faucet-roy`; faucet setiap VPS menerima halaman explorer roy; `scripts/vps-resmi-periksa.sh` bawaan 3 VPS; ketiga VPS dipasang ulang dari satu commit |
 
 ## Definition of done
 - [x] Q206a commit compose, skrip, dan dokumen (c8fbba8, inti 15efb07 DEC-47; 27 November 2026)
@@ -25,3 +26,8 @@
 - [x] Q206d `vps-resmi-periksa.sh zevrigo-vps zevrigo-eu` = `SERAGAM` (27 November 2026): paket Docker VPS demo disamakan dengan VPS
   Eropa, kedua VPS dipasang dari commit yang sama; sisa susunan lama VPS Eropa (`~/zevrigo-eu`, volume `zevrigo-eu_*`, token
   `~/.zevrigo-eu.env`) dihapus sesudah isi volume baru dicocokkan
+- [x] Q207c VPS ketiga `zevrigo-roy` memakai susunan seragam (27 November 2026, 17.56): commit 5717346 (faucet `--allow-origin`
+  `demo-explorer-roy`, pemeriksa bawaan 3 VPS); roy 8 layanan, image 6b342593, seed ketiga PeerId `12D3KooWRQCv…1SsU` tersambung
+  ke seed pertama, node uji PC tersambung lewat Cloudflare, explorer/RPC/faucet `-roy` menjawab dari internet; VPS demo lalu VPS
+  Eropa dipasang ulang dari commit yang sama; `vps-resmi-periksa.sh` 3 VPS = `SERAGAM` (tinggi 4538). Wallet panas faucet roy baru
+  (saldo 0, belum diisi); seed ketiga belum masuk seed resmi bawaan node (DEC-43), dicatat untuk rilis berikutnya bersama seed kedua
