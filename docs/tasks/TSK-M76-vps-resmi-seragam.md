@@ -15,7 +15,9 @@
 | Pemeriksaan (Q206d) | `scripts/vps-resmi-periksa.sh` = `SERAGAM`; versi Docker disamakan bila beda |
 
 ## Definition of done
-- [ ] Q206a commit compose, skrip, dan dokumen
-- [ ] Q206b VPS Eropa memakai susunan seragam
-- [ ] Q206c VPS pertama memakai susunan seragam
+- [x] Q206a commit compose, skrip, dan dokumen (c8fbba8, inti 15efb07 DEC-47; 27 November 2026)
+- [x] Q206b VPS Eropa memakai susunan seragam (27 November 2026, 15.37): data seed kedua dan pengamat kedua disalin ke volume
+  `zevrigo-publik_*` (sidik sama), PeerId seed kedua tetap `12D3KooWQEYr…CXTR`, 8 layanan jalan, explorer/RPC/faucet `-eu` menjawab
+  dari internet; volume lama `zevrigo-eu_*` disimpan sampai Q206d
+- [ ] Q206c VPS pertama memakai susunan seragam; `vps-resmi-pasang.sh` membuat ulang semua layanan (`--force-recreate`)
 - [ ] Q206d `vps-resmi-periksa.sh` = `SERAGAM`

@@ -7,8 +7,12 @@
 # zevrigo:regtest dengan ID yang sama dengan PC (dikirim dulu dengan docker save/load). Langkah:
 #   1. compose.yaml dan compose.publik.yaml dari commit HEAD (bukan salinan kerja) disalin ke ~/zevrigo; berkas lama ke
 #      ~/zevrigo/sebelum/
-#   2. konfigurasi diperiksa, lalu docker compose up -d --no-build (hanya layanan yang berubah yang dibuat ulang)
+#   2. konfigurasi diperiksa, lalu docker compose up -d --no-build --force-recreate: SEMUA layanan dibuat ulang (Q206c). Layanan
+#      yang berbagi namespace jaringan node (explorer, gerbang-rpc, penambang-cadangan, cloudflared*) harus ikut dibuat ulang bila
+#      node dibuat ulang; dengan semua dibuat ulang, setiap VPS sesudah pemasangan pasti dalam keadaan yang sama. Gangguan ±1 menit
 #   3. semua layanan profile aktif jalan dalam 90 detik, lalu ~/zevrigo/VERSI ditulis
+# Pemasangan pertama di VPS yang masih memakai susunan lama (profile vps, tanpa .env) memakai skrip pemindahan tersendiri
+# (Q206b, Q206c), karena pemulihan di bawah memakai .env baru.
 # Gagal di langkah 2-3: berkas lama dipasang lagi dan layanan dinyalakan lagi dengan berkas lama.
 set -euo pipefail
 
@@ -65,11 +69,11 @@ pulih() {
   echo "GAGAL: $1"
   if [ "$ADA_LAMA" = 1 ]; then
     cp -p sebelum/compose.yaml sebelum/compose.publik.yaml . && echo "pemulihan: berkas lama dipasang"
-    docker compose up -d --no-build < /dev/null 2>&1 | tail -n 5
+    docker compose up -d --no-build --force-recreate < /dev/null 2>&1 | tail -n 5
   fi
   exit 1
 }
-docker compose up -d --no-build < /dev/null > /tmp/vps-resmi-up.log 2>&1 || { tail -n 15 /tmp/vps-resmi-up.log; pulih "docker compose up"; }
+docker compose up -d --no-build --force-recreate < /dev/null > /tmp/vps-resmi-up.log 2>&1 || { tail -n 15 /tmp/vps-resmi-up.log; pulih "docker compose up"; }
 tail -n 15 /tmp/vps-resmi-up.log
 HARUS=$(docker compose config --services < /dev/null | LC_ALL=C sort | tr '\n' ' ')
 i=0; KURANG=$HARUS
