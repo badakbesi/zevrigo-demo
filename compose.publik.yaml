@@ -272,6 +272,8 @@ services:
       - --allow-origin
       - https://demo-explorer-eu.zevrigo.online
       - --allow-origin
+      - https://demo-explorer-roy.zevrigo.online
+      - --allow-origin
       - https://zevrigo.ratuaurion.store
     network_mode: "service:node-faucet"
     volumes:
