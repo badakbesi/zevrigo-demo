@@ -267,7 +267,7 @@ export function persenKuota(kuota: string): number | null {
   return cocok ? Math.round(Number(cocok[1]) / 10) : null;
 }
 
-export const PAKET_TIRUAN = '7d90a27fc6e7cd67eda944291a77fdb9cf1fc13ba7b0765a3e1a4cffb333306b';
+export const PAKET_TIRUAN = '6d9079e2bbb8b41e418fe813f5ba0a7b47107650a2e5bbeabc3e928066249186';
 
 function cekTiruan(sandi: string): string {
   let h = 5381;
@@ -492,7 +492,7 @@ export function createMockVpsApi(): VpsApi {
     async status() {
       wajibTerbuka();
       return {
-        versi: 'demo-zevrigo-vps zevrigo-demo faa9c3a (tiruan)',
+        versi: 'demo-zevrigo-vps zevrigo-demo e48926b (tiruan)',
         layanan: 'active',
         aktifSejak: '',
         cpu: 1,

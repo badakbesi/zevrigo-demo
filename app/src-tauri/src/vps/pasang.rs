@@ -20,8 +20,9 @@ pub const RILIS: &str =
 /// Nama berkas paket VPS di rilis.
 pub const PAKET: &str = "demo-zevrigo-vps-linux-x86_64.tar.gz";
 /// SHA-256 paket VPS yang dikenal aplikasi ini (tertanam di aplikasi, pencipta 25 November 2026): rilis `demo-zevrigo-vps`
-/// zevrigo-demo faa9c3a (Q198f, Q198g). Paket VPS baru berarti versi aplikasi baru.
-pub const PAKET_SHA256: &str = "7d90a27fc6e7cd67eda944291a77fdb9cf1fc13ba7b0765a3e1a4cffb333306b";
+/// zevrigo-demo e48926b dan repo inti 661781a (seed regtest baru sesudah jaringan demo dimulai ulang 28 November 2026, Q215a).
+/// Paket VPS baru berarti APK baru (versi tampil tetap 0.1.0, versionCode naik; pencipta 28 November 2026).
+pub const PAKET_SHA256: &str = "6d9079e2bbb8b41e418fe813f5ba0a7b47107650a2e5bbeabc3e928066249186";
 /// Komentar kunci publik aplikasi di authorized_keys.
 const KOMENTAR_KUNCI: &str = "zevrigo-node-android";
 /// Skrip pemeriksaan VPS (tanpa sudo, tanpa mengubah apa pun).

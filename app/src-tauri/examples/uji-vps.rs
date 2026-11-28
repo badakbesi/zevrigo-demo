@@ -171,7 +171,7 @@ async fn uji() -> Hasil<()> {
     // U6 skrip bantu lewat sudo -n.
     let status = sesi.status_vps().await.map_err(g)?;
     if status.layanan != "active"
-        || !status.versi.contains("faa9c3a")
+        || !status.versi.contains("e48926b")
         || status.kuota_cpu != "500ms"
     {
         return Err(format!("U6: status tidak sesuai: {status:?}"));

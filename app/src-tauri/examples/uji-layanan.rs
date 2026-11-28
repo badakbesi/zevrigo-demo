@@ -195,7 +195,7 @@ async fn uji() -> Hasil<()> {
 
     // L4 skrip bantu + pengendali lewat kunci aplikasi.
     let status = l.status().await.map_err(g)?;
-    if status.layanan != "active" || !status.versi.contains("faa9c3a") {
+    if status.layanan != "active" || !status.versi.contains("e48926b") {
         return Err(format!("L4: status: {status:?}"));
     }
     let info_rpc = l.rpc("info", json!({})).await.map_err(g)?;
