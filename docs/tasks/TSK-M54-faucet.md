@@ -16,7 +16,7 @@ faucet hanya diisi dari kantong Faucet (500.000 ZVRG, contoh demo).
 | Batas | Urutan: alamat regtest sah dan bukan alamat faucet, batas harian (`--batas-harian`, bawaan 100), pengunjung (hash alamat IP dengan kunci acak per hari, hanya di memori), alamat (sekali per hari UTC), node (jaringan regtest dan genesis regtest), saldo. Batas hanya terpakai bila node menerima transaksi. Batas alamat dan harian disimpan di `<datadir>/faucet-batas.json` (`versi`, `hari`, `jumlah`, `alamat`), tetap berlaku setelah restart; file rusak membuat faucet tidak start |
 | Sesudah restart | Kiriman lama yang masih di mempool tidak diketahui; faucet menjawab `busy` sampai mempool tidak memuat transaksi faucet (paling lama satu blok), agar tidak membelanjakan output yang sama dua kali. Selama itu output mempool ke faucet tidak dihitung (saldo `GET` hanya UTXO terkonfirmasi yang belum dibelanjakan mempool) |
 | HTTP | `GET /api/v1/faucet`: `network`, `address`, `amount`, `balance` (quanta dan ZVRG), `daily_limit`, `remaining_today`, `synced`, `ready`. `POST` badan `{"address": ...}` paling besar 4 KiB: `txid`, `address`, `amount`, `fee`. Galat `{"error": kode, "message": teks}`: `400` `bad_address`, `own_address`, `bad_request`; `429` `visitor_limit`, `address_limit`, `daily_limit`, `rate_limited` (laju bawaan 2 per detik, `crate::limit`); `503` `empty`, `busy`, `node_unreachable`, `wrong_network`, `rejected` tanpa rincian node; `500` `internal`. `405`, `404`, `413` |
-| CORS dan proxy | Kepala CORS hanya untuk origin di `--allow-origin` (bawaan `https://zevrigo.ratuaurion.store`), preflight `OPTIONS`. `CF-Connecting-IP` hanya dipercaya untuk koneksi dari alamat `--trust-proxy-host` (misalnya container `cloudflared`), di-resolve ulang tiap 60 detik |
+| CORS dan proxy | Kepala CORS hanya untuk origin di `--allow-origin` (bawaan `https://demo-explorer.zevrigo.online`), preflight `OPTIONS`. `CF-Connecting-IP` hanya dipercaya untuk koneksi dari alamat `--trust-proxy-host` (misalnya container `cloudflared`), di-resolve ulang tiap 60 detik |
 | Privasi | Log: start, berhenti, txid kiriman, galat node. Tanpa alamat IP dan tanpa alamat penerima. File batas hanya berisi alamat penerima hari itu |
 | Dependensi | Fitur `sync` tokio (paket yang sama, tanpa paket baru); Cargo.lock tidak berubah |
 | Test | `faucet`: 6 (file frasa, kiriman berantai + batas + file batas, restart + `busy` + hari berikutnya, saldo habis + node salah/mati, HTTP + CORS + galat, laju + alamat pengunjung + kode galat) dengan node tiruan di belakang server MOD-08 yang memeriksa input, tanda tangan BIP340, dan jumlah. `cli`: 2. Workspace 460 → 468 |
@@ -31,11 +31,11 @@ penerima tepat 100 ZVRG, faucet satu UTXO = 500.000 ZVRG − biaya upacara − b
 
 ## Bagian B
 - Selesai bersama peluncuran (Q133): layanan `faucet` di `compose.publik.yaml` di namespace `node-faucet` (`--datadir /data`,
-  `--http-bind 0.0.0.0`, `--trust-proxy-host node`, volume `zvrg-faucet-dompet`). Route `zevrigo-faucet.ratuaurion.store` →
+  `--http-bind 0.0.0.0`, `--trust-proxy-host node`, volume `zvrg-faucet-dompet`). Route `demo-faucet.zevrigo.online` →
   `http://node-faucet:28805` dibuat pencipta di dasbor Cloudflare. Pengisian (keputusan pencipta 13 November 2026): upacara
   ke kantong Faucet di wallet treasury; faucet diisi ulang bertahap dengan `zevrigo-cli send --dari` (TSK-M63).
 - Halaman faucet di explorer (Q134, keputusan pencipta 14 November 2026: tanpa anti-bot dulu, cukup batas harian):
-  `/faucet/` di antarmuka web MOD-14, memanggil `https://zevrigo-faucet.ratuaurion.store/api/v1/faucet` (CORS sudah
+  `/faucet/` di antarmuka web MOD-14, memanggil `https://demo-faucet.zevrigo.online/api/v1/faucet` (CORS sudah
   mengizinkan origin explorer); program explorer `--faucet-origin` menambahkan origin itu ke `connect-src` halaman HTML.
   Alamat diperiksa bech32m di peramban; galat faucet ditampilkan dengan teks Indonesia dan Inggris.
 - Berikutnya: anti-bot (misalnya Cloudflare Turnstile, layanan pihak ketiga yang butuh persetujuan pencipta) bila jatah

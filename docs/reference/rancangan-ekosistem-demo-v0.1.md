@@ -62,7 +62,7 @@ Prinsip:
   │ node TREASURY   + wallet treasury (dipakai operator lewat CLI)        │
   │ node FAUCET     + faucet 28805 lewat jaringan Docker (wallet panas)   │
   │ node PENGAMAT   (hanya menerima siaran)                               │
-  │   keempatnya: --connect /dns4/zevrigo-seed.ratuaurion.store/…/ws     │
+  │   keempatnya: --connect /dns4/demo-seed-p2p.zevrigo.online/…/ws      │
   └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -177,7 +177,7 @@ tinggi buka berikutnya; grafik koin terkunci per tinggi buka (tokenomik v0.1 Bag
 - Bagian A (TSK-M54): `zevrigo-demo faucet` sudah ada (wallet panas regtest dengan frasa di volume faucet, `GET`/`POST
   /api/v1/faucet`, batas per pengunjung, per alamat, dan harian, kiriman berantai lewat mempool, CORS hanya untuk explorer,
   `CF-Connecting-IP` hanya dari `--trust-proxy-host`). Bagian B: layanan di `compose.publik.yaml`, route
-  `zevrigo-faucet.ratuaurion.store`, halaman faucet di explorer, dan anti-bot.
+  `demo-faucet.zevrigo.online`, halaman faucet di explorer, dan anti-bot.
 - Pengisian (keputusan pencipta 13 November 2026): upacara mengirim 500.000 ZVRG ke kantong Faucet di wallet treasury, bukan
   ke wallet panas layanan faucet. Faucet diisi ulang bertahap (misalnya 10.000 ZVRG) dengan `zevrigo-cli send --dari
   <alamat kantong Faucet>` (TSK-M63), sehingga kantong lain tidak tersentuh dan sisa kantong Faucet terlihat di explorer.
@@ -192,7 +192,7 @@ tinggi buka berikutnya; grafik koin terkunci per tinggi buka (tokenomik v0.1 Bag
 - Operator memeriksa antrean lalu menjalankan alat distribusi dari wallet treasury.
 
 ### 4.9 Gerbang RPC untuk wallet peserta (TSK-M53)
-`zevrigo-demo rpc` (MOD-18) di namespace node seed, `127.0.0.1:28804`, hostname `zevrigo-rpc.ratuaurion.store`. Dipakai
+`zevrigo-demo rpc` (MOD-18) di namespace node seed, `127.0.0.1:28804`, hostname `demo-gerbang-rpc.zevrigo.online`. Dipakai
 wallet desktop dan APK Wallet peserta yang tidak menjalankan node sendiri.
 - Satu permintaan JSON-RPC 2.0 per `POST`. Hanya metode aman yang diteruskan ke RPC node seed: `get_chain_info`,
   `get_block_hash`, `get_block`, `get_mempool`, `scan_utxos`, `scan_mempool`, `send_raw_transaction`. Hasil atau galat node
@@ -212,7 +212,7 @@ wallet desktop dan APK Wallet peserta yang tidak menjalankan node sendiri.
 |---|---|---|
 | Isi | Antarmuka explorer (static export) dibundel, alamat API bisa diatur | Wallet MOD-15 untuk Android |
 | Butuh | CORS di API explorer untuk origin aplikasi | HTTPS ke gerbang RPC (klien RPC sekarang tanpa TLS: TLS lewat paket baru atau plugin HTTP Tauri), output jenis 1, tombol faucet, tombol daftar, label REGTEST besar |
-| Paket (usul) | `store.ratuaurion.zevrigo.explorer` | `store.ratuaurion.zevrigo.wallet` |
+| Paket | `com.zevrigo.explorer` | `com.zevrigo.wallet` |
 | Tempat di repo | `apps/explorer/android` (DEC-36) | `apps/wallet` (MOD-15) |
 
 - Satu keystore untuk kedua paket, di luar repo, izin `600`, dicadangkan di luar komputer. Keystore hilang berarti pembaruan
@@ -228,13 +228,13 @@ APK, peringatan aplikasi tak dikenal, cadangan 24 kata, faucet, kirim, menjalank
 
 | Hostname | Tujuan route | Isi | Status |
 |---|---|---|---|
-| `zevrigo.ratuaurion.store` | `localhost:28802` | Explorer, halaman faucet, treasury, panduan, unduh APK | ada |
-| `zevrigo-seed.ratuaurion.store` | `localhost:28803` | Seed P2P WebSocket | ada |
-| `zevrigo-rpc.ratuaurion.store` | `localhost:28804` | Gerbang RPC wallet | baru |
-| `zevrigo-faucet.ratuaurion.store` | `http://node-faucet:28805` (jaringan Docker) | Faucet | baru |
-| `zevrigo-daftar.ratuaurion.store` | `localhost:28806` | Pendaftaran Investor Demo | baru |
+| `demo-explorer.zevrigo.online` | `localhost:28802` | Explorer, halaman faucet, treasury, panduan, unduh APK | ada |
+| `demo-seed-p2p.zevrigo.online` | `localhost:28803` | Seed P2P WebSocket | ada |
+| `demo-gerbang-rpc.zevrigo.online` | `localhost:28804` | Gerbang RPC wallet | baru |
+| `demo-faucet.zevrigo.online` | `http://node-faucet:28805` (jaringan Docker) | Faucet | baru |
+| `demo-daftar.zevrigo.online` | `localhost:28806` | Pendaftaran Investor Demo | baru |
 
-Semua route tipe HTTP (TLS diputus Cloudflare), satu tingkat subdomain (sertifikat `*.ratuaurion.store`). Testnet nanti memakai
+Semua route tipe HTTP (TLS diputus Cloudflare), satu tingkat subdomain (sertifikat `*.zevrigo.online`). Testnet nanti memakai
 seri 1880x.
 
 ## 6. Urutan task
@@ -248,7 +248,7 @@ chain dimajukan ke tahap 1. Tahap 2 tidak butuh reset kedua: vesting dibagi dari
 | # | Task | Isi | Bergantung |
 |---|---|---|---|
 | 1 | TSK-M47 | 5 node di compose publik; bagian B: wallet penambang dan treasury dibuat pencipta | TSK-S08 |
-| 2 | TSK-M53 | `apps/demo` (MOD-18) mode `rpc`: gerbang RPC di `zevrigo-rpc.ratuaurion.store` (Bagian 4.9) | TSK-S08 |
+| 2 | TSK-M53 | `apps/demo` (MOD-18) mode `rpc`: gerbang RPC di `demo-gerbang-rpc.zevrigo.online` (Bagian 4.9) | TSK-S08 |
 | 3 | TSK-M60 | HTTPS di klien RPC MOD-08: fitur `tls` `jsonrpsee-http-client` (pilihan pencipta, DEC-10 bagian 14) | TSK-M53 |
 | 4 | TSK-M61 | Wallet desktop versi demo: alamat node bawaan gerbang publik, label "REGTEST: koin demo", installer Windows dibangun GitHub Actions dan ditandatangani SignPath Foundation (DEC-07) | TSK-M60 |
 | 5 | TSK-M62 | Alat upacara genesis regtest `zevrigo-demo upacara` (MOD-18): `G` (kunci rahasia `1`) ke 8 kantong (Bagian 4.2) | TSK-M47 |

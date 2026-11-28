@@ -5,20 +5,20 @@
 
 ## Tujuan
 Pencipta memutuskan (9 November 2026) membuka explorer dan seed node ke publik untuk sementara dari komputer sendiri lewat
-Cloudflare Tunnel dengan domain `ratuaurion.store`, sebagai bukti hidup untuk calon pendukung VPS testnet. Task ini
+Cloudflare Tunnel dengan domain `zevrigo.online`, sebagai bukti hidup untuk calon pendukung VPS testnet. Task ini
 membuka explorer (regtest sebagai uji). Seed node dan testnet menyusul.
 
 ## Isi
 | Bagian | Isi |
 |---|---|
-| `compose.publik.yaml` (baru) | Dipakai bersama `compose.yaml`; project `zevrigo-publik`; port host node dicabut (`!reset`); explorer `--trust-proxy` di `127.0.0.1` dalam namespace node; layanan `cloudflared` (image resmi dikunci digest, `tunnel --no-autoupdate run`, token dari `${HOME}/.zevrigo-tunnel.env`, berbagi namespace node) |
+| `compose.publik.yaml` (baru) | Dipakai bersama `compose.yaml`; project `zevrigo-publik`; port host node dicabut (`!reset`); explorer `--trust-proxy` di `127.0.0.1` dalam namespace node; layanan `cloudflared` (image resmi dikunci digest, `tunnel --no-autoupdate run`, token dari `${HOME}/.zevrigo.env`, berbagi namespace node) |
 | Dokumen | Spesifikasi Docker v0.1 Bagian 7 dan DEC-10 bagian 9 (tambahan), README, MOD-14, docs/tasks |
 | Tanpa | Perubahan kode, dependensi Rust/npm baru, atau port router yang dibuka |
 
 ## Gerbang (Q121)
 Token ada (izin `600`, satu baris, isinya tidak dicetak); `docker compose config` sah, node tanpa port host, explorer
 dengan `--trust-proxy`; image dibangun ulang dan `zevrigo-explorer --help` memuat `--trust-proxy`; `cloudflared` mencatat
-koneksi tunnel; miner di namespace yang sama menambang 5 blok; `https://zevrigo.ratuaurion.store/api/v1/status` menjawab
+koneksi tunnel; miner di namespace yang sama menambang 5 blok; `https://demo-explorer.zevrigo.online/api/v1/status` menjawab
 regtest dengan tinggi indeks paling sedikit 5 dan halaman `/` menjawab `200`; `make check-all` lolos.
 
 ## Batas

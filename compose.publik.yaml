@@ -5,8 +5,6 @@
 #   demo  SUSUNAN VPS RESMI (TSK-M76, DEC-47): sama persis di setiap VPS resmi Zevrigo; sekarang SATU VPS resmi (DEC-48):
 #         node (seed), node-pengamat, explorer, gerbang-rpc, node-faucet + faucet, penambang-cadangan, cloudflared-zevrigo
 #   pc    komputer pencipta: node-penambang + miner-berkala, node-treasury (kunci kantong treasury tidak pernah di VPS)
-#   lama  tunnel lama *.ratuaurion.store (layanan cloudflared): SEMENTARA, hanya di VPS resmi pertama, sampai dihentikan
-#         (DEC-42, paling cepat 23 Desember 2026); sesudah itu layanan dan profile ini dihapus
 #
 # VPS resmi: berkas ini dan compose.yaml disalin apa adanya (scripts/vps-resmi-pasang.sh) ke ~/zevrigo, dan semua pilihan dibaca
 # dari ~/zevrigo/.env (contoh scripts/vps-resmi.env.contoh: COMPOSE_FILE, COMPOSE_PROFILES, ZVRG_HOST_SEED, ZVRG_DIAM). Perintahnya
@@ -29,8 +27,7 @@
 #   demo-seed-p2p.zevrigo.online    -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare) = ZVRG_HOST_SEED
 #   demo-gerbang-rpc.zevrigo.online -> localhost:28804   gerbang RPC wallet peserta (TSK-M53)
 #   demo-faucet.zevrigo.online      -> node-faucet:28805 faucet demo (TSK-M54), lewat jaringan Docker
-# Tunnel lama (profile lama, ${HOME}/.zevrigo-tunnel.env): zevrigo, zevrigo-seed, zevrigo-rpc, zevrigo-faucet .ratuaurion.store,
-# tujuan sama; dipakai wallet 0.3.1 dan Explorer 0.1.0 (RENCANA_T13). Blog resmi tidak di VPS (Q186): https://zevrigo.online.
+# Blog resmi tidak di VPS (Q186): https://zevrigo.online.
 #
 # Node lain bergabung dengan --seed-resmi (Q191, DEC-43: seed bawaan node, alamat dan PeerId di dalam node), atau dengan alamat:
 #   --connect /dns4/demo-seed-p2p.zevrigo.online/tcp/443/tls/sni/demo-seed-p2p.zevrigo.online/ws/p2p/<PeerId seed>
@@ -149,22 +146,6 @@ services:
     stop_grace_period: 10s
     restart: unless-stopped
 
-  cloudflared:
-    profiles: ["lama"]
-    # Tunnel lama *.ratuaurion.store, SEMENTARA (profile lama, hanya VPS resmi pertama) sampai dihentikan (DEC-42, paling cepat
-    # 23 Desember 2026); lalu layanan ini dihapus. cloudflared 2026.10.7 (Q120), image resmi dikunci digest (DEC-10 bagian 9).
-    # required: false agar VPS lain (tanpa berkas ini) tetap bisa membaca compose.
-    image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
-    command: ["tunnel", "--no-autoupdate", "run"]
-    env_file:
-      - path: ${HOME}/.zevrigo-tunnel.env
-        required: false
-    network_mode: "service:node"
-    depends_on:
-      - explorer
-    stop_grace_period: 30s
-    restart: unless-stopped
-
   cloudflared-zevrigo:
     profiles: ["demo"]
     # Q187 (22 November 2026, pencipta): tunnel `zevrigo` untuk host *.zevrigo.online (DEC-48),
@@ -258,7 +239,7 @@ services:
     image: zevrigo:regtest
     pull_policy: never
     entrypoint: ["zevrigo-demo"]
-    # Q187: faucet dipanggil dari halaman explorer dan host lama (DEC-42, DEC-48).
+    # Q187: faucet dipanggil dari halaman explorer (DEC-42, DEC-48).
     command:
       - faucet
       - --datadir
@@ -269,8 +250,6 @@ services:
       - node
       - --allow-origin
       - https://demo-explorer.zevrigo.online
-      - --allow-origin
-      - https://zevrigo.ratuaurion.store
     network_mode: "service:node-faucet"
     volumes:
       - zvrg-faucet-dompet:/data

@@ -13,7 +13,7 @@ Urutan Rancangan Ekosistem Demo v0.1 Bagian 4.3, dijalankan satu skrip:
 | Reset | Dihapus: `regtest/chain.redb`, `regtest/explorer.sqlite*`, `regtest/history.json`. Tetap: `regtest/p2p_key` (PeerId sama), `regtest/wallet.json`, `payout-penambang` |
 | Tertutup | Hanya node seed, tanpa tunnel. 99 blok ke alamat penambang (pilihan pencipta). Rencana upacara diperiksa terhadap daftar kantong, lalu `upacara --kirim`, 1 blok. `scan_utxos` di seed: 8 kantong tepat satu UTXO, jumlah persis, kantong Faucet dikurangi biaya; `G` habis; 100 coinbase penambang |
 | Buka | Explorer, gerbang RPC, `cloudflared`; 4 node operator sinkron; saldo wallet treasury = 10.000.000 ZVRG − biaya, 8 UTXO; layanan `faucet` (saldo 0 sampai isi ulang pertama); `miner-berkala` lanjut dari blok 101; dari internet gerbang RPC menunjukkan 8 kantong yang sama |
-| Sesudah skrip (pencipta) | Route `zevrigo-faucet.ratuaurion.store` → `http://node-faucet:28805`; isi ulang faucet pertama 10.000 ZVRG dengan `zevrigo-cli send --dari <kantong Faucet>` di node treasury (butuh password treasury) |
+| Sesudah skrip (pencipta) | Route `demo-faucet.zevrigo.online` → `http://node-faucet:28805`; isi ulang faucet pertama 10.000 ZVRG dengan `zevrigo-cli send --dari <kantong Faucet>` di node treasury (butuh password treasury) |
 
 Batas yang diumumkan tetap berlaku (Bagian 4.3): node mana pun dengan chain lebih berat yang tersambung kemudian bisa
 menimpa chain ini. Chain uji lama (tinggi ±870) hanya ada di cadangan.

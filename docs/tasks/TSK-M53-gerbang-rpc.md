@@ -13,14 +13,14 @@ sengaja tidak terbuka, jadi gerbang ini meneruskan hanya metode yang aman, denga
 | MOD-18 baru | `apps/demo`, paket `zevrigo-demo` (pustaka + bin), anggota workspace. Modul `cli` (mode `rpc`; `faucet` dan `daftar` dijawab "belum tersedia"), `gateway`, `limit` |
 | `gateway` | axum 0.8, satu permintaan JSON-RPC 2.0 per `POST` di semua jalur. `parse_call`: `-32700` JSON rusak; `-32600` batch, bukan objek, `id` bukan angka atau teks, `jsonrpc` bukan `"2.0"`, `method` bukan teks, `params` bukan objek atau array; `-32601` di luar `ALLOWED_METHODS` (7 metode, tanpa `get_block_template` dan `submit_block`). Diteruskan lewat `RpcClient::raw_request` (MOD-08); galat node diteruskan dengan kode, pesan, dan `data` (misalnya `reason` `T6`); node tidak menjawab `-32603` "node tidak bisa dihubungi". Badan dibaca paling banyak 256 KiB (`413`); selain `POST` `405` dengan `Allow: POST`. Jawaban `no-store` dan `nosniff` |
 | `limit` | Salinan pembatas MOD-14 (TSK-M40): `--rate` bawaan 20 (per pengunjung 20/detik kapasitas 80, bersama 400/detik), diperiksa sebelum badan dibaca, `429` dengan `Retry-After: 1`. `--trust-proxy`: `CF-Connecting-IP` hanya dari loopback (pola TSK-M43). Tanpa menyimpan atau mencatat alamat |
-| Docker | Image `zevrigo:regtest` memuat `zevrigo-demo`. Layanan `gerbang-rpc` di namespace node seed (`rpc --trust-proxy`, 256 MiB, 0,5 CPU). Public hostname `zevrigo-rpc.ratuaurion.store` → HTTP `localhost:28804` |
+| Docker | Image `zevrigo:regtest` memuat `zevrigo-demo`. Layanan `gerbang-rpc` di namespace node seed (`rpc --trust-proxy`, 256 MiB, 0,5 CPU). Public hostname `demo-gerbang-rpc.zevrigo.online` → HTTP `localhost:28804` |
 | Dependensi | Tanpa paket baru (DEC-10 bagian 13); Cargo.lock hanya bertambah entri `zevrigo-demo` |
 | Test | `cli`: 2; `limit`: 3 (sama dengan MOD-14); `gateway`: 7 (subset metode, `parse_call`, node tiruan MOD-08 lewat gerbang termasuk `data.reason` dan metode tambang tidak pernah sampai, HTTP rusak 405/413/-32700/-32600, batas laju 429, node mati -32603, `client_ip`). Workspace 437 → 449 |
 
 ## Gerbang (Q127)
 Lihat Spesifikasi Docker v0.1 Bagian 7, "Gerbang RPC". Ringkas: Cargo.lock hanya `zevrigo-demo`; `make check-all` 449 test;
 image dibangun ulang; `gerbang-rpc` berjalan tanpa menyalakan ulang container lain; `zevrigo-cli --rpc-url
-http://127.0.0.1:28804 info` di namespace seed menjawab; dari internet `https://zevrigo-rpc.ratuaurion.store` menjawab
+http://127.0.0.1:28804 info` di namespace seed menjawab; dari internet `https://demo-gerbang-rpc.zevrigo.online` menjawab
 `get_chain_info` (regtest) dan `get_block_hash` 0 (`network_id` regtest), menolak `get_block_template` dan `submit_block`
 (`-32601`), batch (`-32600`), `GET` (`405`), dan badan 262.145 byte (batas + 1, `413`).
 

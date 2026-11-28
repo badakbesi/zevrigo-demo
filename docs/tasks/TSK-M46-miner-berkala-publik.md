@@ -4,7 +4,7 @@
 - **Estimasi:** XS · **Ditulis:** Quick, 12 November 2026
 
 ## Tujuan
-Explorer publik `https://zevrigo.ratuaurion.store` hanya menampilkan blok yang ditambang saat gerbang (tinggi 6), sehingga
+Explorer publik `https://demo-explorer.zevrigo.online` hanya menampilkan blok yang ditambang saat gerbang (tinggi 6), sehingga
 tampak statis. Pencipta meminta explorer tampak hidup (12 November 2026). Satu layanan Docker menambang satu blok regtest
 secara berkala ke seed, sehingga blok baru muncul terus dan juga tersiar ke rekan yang tersambung lewat seed.
 
@@ -18,7 +18,7 @@ secara berkala ke seed, sehingga blok baru muncul terus dan juga tersiar ke reka
 ## Gerbang (Q123)
 Konfigurasi compose sah; `miner-berkala` di namespace node, tanpa port host, jeda 120; layanan dinyalakan dengan
 `up -d --no-deps` (node, explorer, cloudflared tidak dinyalakan ulang); dalam 300 detik tinggi seed naik paling sedikit 2
-dan log mencatat `blok diterima`; `https://zevrigo.ratuaurion.store/api/v1/status` mengikuti tinggi baru; kebijakan
+dan log mencatat `blok diterima`; `https://demo-explorer.zevrigo.online/api/v1/status` mengikuti tinggi baru; kebijakan
 restart `unless-stopped`.
 
 ## Batas

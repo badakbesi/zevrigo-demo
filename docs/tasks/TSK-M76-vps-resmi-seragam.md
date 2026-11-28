@@ -8,10 +8,10 @@
 ## Isi
 | Bagian | Isi |
 |---|---|
-| Compose (Q206a) | profile `vps` → `demo`; nama host seed dari `ZVRG_HOST_SEED`; seed memakai `--seed-resmi`; batas sumber daya seed dan explorer; tunnel lama ke profile `lama` (sementara); faucet menerima halaman explorer setiap VPS |
+| Compose (Q206a) | profile `vps` → `demo`; nama host seed dari `ZVRG_HOST_SEED`; seed memakai `--seed-resmi`; batas sumber daya seed dan explorer; faucet menerima halaman explorer setiap VPS |
 | Skrip (Q206a) | `scripts/vps-resmi.env.contoh`, `scripts/vps-resmi-pasang.sh` (salin compose dari commit, periksa, nyalakan, tulis `VERSI`, pulihkan bila gagal), `scripts/vps-resmi-periksa.sh` (bandingkan semua VPS) |
 | VPS Eropa (Q206b) | dari `~/zevrigo-eu` (project `zevrigo-eu`) ke `~/zevrigo` (project `zevrigo-publik`): volume seed kedua dan pengamat kedua disalin ke nama baru, PeerId seed kedua tetap; explorer, gerbang RPC, faucet, penambang cadangan baru; route `demo-explorer-eu`, `demo-gerbang-rpc-eu`, `demo-faucet-eu` |
-| VPS pertama (Q206c) | `.env` (`demo,lama`), compose baru, `VERSI`, image lama dibersihkan (aktif + satu sebelumnya) |
+| VPS pertama (Q206c) | `.env`, compose baru, `VERSI`, image lama dibersihkan (aktif + satu sebelumnya) |
 | Pemeriksaan (Q206d) | `scripts/vps-resmi-periksa.sh` = `SERAGAM`; versi Docker disamakan bila beda |
 | VPS ketiga (Q207c) | `zevrigo-roy` (`vps-roy`, tunnel `zevrigo-roy`, `ZVRG_DIAM` 540): seed ketiga, pengamat, explorer, gerbang RPC, faucet, penambang cadangan; route `demo-seed-p2p-roy`, `demo-explorer-roy`, `demo-gerbang-rpc-roy`, `demo-faucet-roy`; faucet setiap VPS menerima halaman explorer roy; `scripts/vps-resmi-periksa.sh` bawaan 3 VPS; ketiga VPS dipasang ulang dari satu commit |
 
@@ -20,7 +20,7 @@
 - [x] Q206b VPS Eropa memakai susunan seragam (27 November 2026, 15.37): data seed kedua dan pengamat kedua disalin ke volume
   `zevrigo-publik_*` (sidik sama), PeerId seed kedua tetap `12D3KooWQEYr…CXTR`, 8 layanan jalan, explorer/RPC/faucet `-eu` menjawab
   dari internet; volume lama `zevrigo-eu_*` disimpan sampai Q206d
-- [x] Q206c VPS pertama memakai susunan seragam (27 November 2026, 15.44): `.env` `demo,lama`, 9 layanan dibuat ulang dari compose
+- [x] Q206c VPS pertama memakai susunan seragam (27 November 2026, 15.44): `.env`, semua layanan dibuat ulang dari compose
   seragam (`vps-resmi-pasang.sh` dengan `--force-recreate`, f3fb23b), PeerId seed pertama tetap, host baru dan lama menjawab, faucet
   menerima halaman explorer Eropa; image lama dibersihkan (aktif + `zevrigo:regtest-sebelumnya`)
 - [x] Q206d `vps-resmi-periksa.sh zevrigo-vps zevrigo-eu` = `SERAGAM` (27 November 2026): paket Docker VPS demo disamakan dengan VPS
@@ -36,5 +36,5 @@
 Pencipta 21.28 sampai 22.03: satu aplikasi dengan satu set alamat untuk manusia; alamat per VPS (`-eu`, `-roy`) sulit dipasang dan
 dipakai. Tunnel `zevrigo-eu` dan `zevrigo-roy` dihapus pencipta di Cloudflare (21.54); VPS Eropa dan VPS roy dikosongkan (Q209,
 22.08), Docker tetap untuk uji node dan penambang. Seed kedua dan ketiga tidak masuk seed bawaan. Susunan DEC-47 tetap berlaku untuk
-VPS resmi; sekarang satu VPS resmi (VPS demo). Repo (Q212c): faucet `--allow-origin` hanya `demo-explorer` dan host lama;
+VPS resmi; sekarang satu VPS resmi (VPS demo). Repo (Q212c): faucet `--allow-origin` hanya `demo-explorer`;
 `vps-resmi-periksa.sh` bawaan `zevrigo-vps`.
