@@ -31,3 +31,10 @@
   ke seed pertama, node uji PC tersambung lewat Cloudflare, explorer/RPC/faucet `-roy` menjawab dari internet; VPS demo lalu VPS
   Eropa dipasang ulang dari commit yang sama; `vps-resmi-periksa.sh` 3 VPS = `SERAGAM` (tinggi 4538). Wallet panas faucet roy baru
   (saldo 0, belum diisi); seed ketiga belum masuk seed resmi bawaan node (DEC-43), dicatat untuk rilis berikutnya bersama seed kedua
+
+## Sesudahnya: satu VPS resmi (DEC-48, 27 November 2026)
+Pencipta 21.28 sampai 22.03: satu aplikasi dengan satu set alamat untuk manusia; alamat per VPS (`-eu`, `-roy`) sulit dipasang dan
+dipakai. Tunnel `zevrigo-eu` dan `zevrigo-roy` dihapus pencipta di Cloudflare (21.54); VPS Eropa dan VPS roy dikosongkan (Q209,
+22.08), Docker tetap untuk uji node dan penambang. Seed kedua dan ketiga tidak masuk seed bawaan. Susunan DEC-47 tetap berlaku untuk
+VPS resmi; sekarang satu VPS resmi (VPS demo). Repo (Q212c): faucet `--allow-origin` hanya `demo-explorer` dan host lama;
+`vps-resmi-periksa.sh` bawaan `zevrigo-vps`.

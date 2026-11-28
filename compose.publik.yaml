@@ -2,7 +2,7 @@
 # v0.1 Bagian 7). Dipakai bersama compose.yaml. Setiap layanan punya profile; tanpa COMPOSE_PROFILES tidak ada layanan publik
 # yang dinyalakan:
 #
-#   demo  SUSUNAN VPS RESMI (TSK-M76, DEC-47): sama persis di SETIAP VPS resmi Zevrigo, tanpa versi per lokasi:
+#   demo  SUSUNAN VPS RESMI (TSK-M76, DEC-47): sama persis di setiap VPS resmi Zevrigo; sekarang SATU VPS resmi (DEC-48):
 #         node (seed), node-pengamat, explorer, gerbang-rpc, node-faucet + faucet, penambang-cadangan, cloudflared-zevrigo
 #   pc    komputer pencipta: node-penambang + miner-berkala, node-treasury (kunci kantong treasury tidak pernah di VPS)
 #   lama  tunnel lama *.ratuaurion.store (layanan cloudflared): SEMENTARA, hanya di VPS resmi pertama, sampai dihentikan
@@ -22,13 +22,13 @@
 # di semua mesin. Node di PC tersambung ke seed lewat alamat publik, sama seperti peserta. PC mati: tidak ada blok dari
 # miner-berkala; penambang-cadangan di VPS menambang bila chain diam ZVRG_DIAM detik; layanan publik tetap menjawab.
 #
-# Token tunnel TIDAK disimpan di repo. Setiap VPS resmi punya tunnel Cloudflare sendiri (akun domain zevrigo.online, layanan
+# Token tunnel TIDAK disimpan di repo. Satu tunnel Cloudflare `zevrigo` (DEC-48; akun domain zevrigo.online, layanan
 # cloudflared-zevrigo); token di ${HOME}/.zevrigo.env (izin 600, satu baris TUNNEL_TOKEN=). Route ("Published application"),
-# semuanya tipe HTTP, sama di setiap tunnel; nama host berakhiran -<lokasi> untuk VPS kedua dan berikutnya:
-#   demo-explorer[-eu].zevrigo.online    -> localhost:28802   explorer
-#   demo-seed-p2p[-eu].zevrigo.online    -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare) = ZVRG_HOST_SEED
-#   demo-gerbang-rpc[-eu].zevrigo.online -> localhost:28804   gerbang RPC wallet peserta (TSK-M53)
-#   demo-faucet[-eu].zevrigo.online      -> node-faucet:28805 faucet demo (TSK-M54), lewat jaringan Docker
+# semuanya tipe HTTP:
+#   demo-explorer.zevrigo.online    -> localhost:28802   explorer
+#   demo-seed-p2p.zevrigo.online    -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare) = ZVRG_HOST_SEED
+#   demo-gerbang-rpc.zevrigo.online -> localhost:28804   gerbang RPC wallet peserta (TSK-M53)
+#   demo-faucet.zevrigo.online      -> node-faucet:28805 faucet demo (TSK-M54), lewat jaringan Docker
 # Tunnel lama (profile lama, ${HOME}/.zevrigo-tunnel.env): zevrigo, zevrigo-seed, zevrigo-rpc, zevrigo-faucet .ratuaurion.store,
 # tujuan sama; dipakai wallet 0.3.1 dan Explorer 0.1.0 (RENCANA_T13). Blog resmi tidak di VPS (Q186): https://zevrigo.online.
 #
@@ -53,8 +53,8 @@
 #   node-faucet     layanan faucet (setiap VPS)    node-pengamat  hanya menerima siaran, saksi (setiap VPS)
 #
 # faucet (TSK-M54 bagian B): zevrigo-demo mode faucet di namespace node-faucet, wallet panas regtest di volume sendiri
-# (zvrg-faucet-dompet: faucet-frasa.txt dibuat sekali dan faucet-batas.json); setiap VPS punya wallet panas sendiri. Halaman
-# /faucet/ setiap explorer memanggil faucet utama (--faucet-origin di bawah). Diisi ulang bertahap dari kantong Faucet treasury:
+# (zvrg-faucet-dompet: faucet-frasa.txt dibuat sekali dan faucet-batas.json); setiap VPS resmi punya wallet panas sendiri. Halaman
+# /faucet/ explorer memanggil faucet (--faucet-origin di bawah). Diisi ulang bertahap dari kantong Faucet treasury:
 #   COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml exec node-treasury zevrigo-cli --datadir /data send \
 #     --dari <alamat kantong Faucet> --to <alamat faucet dari log: alamat faucet:> --amount 10000
 #
@@ -116,7 +116,7 @@ services:
     # publik). Setiap 30 detik membaca tinggi chain; menambang satu blok hanya bila tinggi tidak naik selama ZVRG_DIAM detik
     # (bawaan 300), misalnya saat PC mati. Selama miner-berkala PC jalan (satu blok per 120 detik) layanan ini diam. Sesudah
     # mulai juga menunggu ZVRG_DIAM detik, agar node seed yang baru menyala sempat sinkron dulu. ZVRG_PAYOUT = payload x-only
-    # alamat penambang PC (publik, dari /data/payout-penambang node-penambang saat Q181); tidak ada kunci rahasia di VPS.
+    # alamat penambang PC (publik, dari /data/payout-penambang node-penambang; wallet penambang baru 28 November 2026, Q212b); tidak ada kunci rahasia di VPS.
     image: zevrigo:regtest
     pull_policy: never
     entrypoint: ["/bin/sh", "-c"]
@@ -138,7 +138,7 @@ services:
           sleep 30
         done
     environment:
-      ZVRG_PAYOUT: "63b0190ce3e9dc8e127985e72ff265b25044b1fe0130ce76d28b50dfcd3770c5"
+      ZVRG_PAYOUT: "bce31560d861cd41eb26456a472df2f8e86408a67d303bd10a384cc9e3d793db"
       ZVRG_DIAM: ${ZVRG_DIAM:-300}
     network_mode: "service:node"
     init: true
@@ -167,8 +167,8 @@ services:
 
   cloudflared-zevrigo:
     profiles: ["demo"]
-    # Q187 (22 November 2026, pencipta): tunnel untuk host *.zevrigo.online; setiap VPS resmi punya tunnel sendiri (TSK-M76),
-    # route sama (kepala berkas). localhost = namespace node seed, dan faucet mempercayai CF-Connecting-IP dari alamat layanan
+    # Q187 (22 November 2026, pencipta): tunnel `zevrigo` untuk host *.zevrigo.online (DEC-48),
+    # route di kepala berkas. localhost = namespace node seed, dan faucet mempercayai CF-Connecting-IP dari alamat layanan
     # node (--trust-proxy-host node). Token tidak di repo.
     image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     command: ["tunnel", "--no-autoupdate", "run"]
@@ -258,7 +258,7 @@ services:
     image: zevrigo:regtest
     pull_policy: never
     entrypoint: ["zevrigo-demo"]
-    # Q187: faucet dipanggil dari halaman explorer setiap VPS resmi dan host lama (halaman yang sama disajikan di semuanya).
+    # Q187: faucet dipanggil dari halaman explorer dan host lama (DEC-42, DEC-48).
     command:
       - faucet
       - --datadir
@@ -269,10 +269,6 @@ services:
       - node
       - --allow-origin
       - https://demo-explorer.zevrigo.online
-      - --allow-origin
-      - https://demo-explorer-eu.zevrigo.online
-      - --allow-origin
-      - https://demo-explorer-roy.zevrigo.online
       - --allow-origin
       - https://zevrigo.ratuaurion.store
     network_mode: "service:node-faucet"

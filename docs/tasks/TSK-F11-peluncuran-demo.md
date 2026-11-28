@@ -27,3 +27,11 @@ baru, PeerId seed baru (`12D3KooWABPBsu8gZWtL7bbeEPjg6gwRPDbp3GZidpTeUC95rRDo`),
 upacara, blok 100) di PC, lalu volume seed dipindah ke VPS (pola TSK-M65). Risiko "chain demo bisa ditulis ulang siapa pun"
 diterima dan diumumkan di blog dan `SUMBER_RESMI.md` repo inti. Langkah: Q156 inventaris, Q157/Q157b hapus PC dan seed baru,
 q157_wallet.sh wallet baru, Q158 commit dan peluncuran tertutup, Q159 VPS.
+
+## Mulai ulang ketiga (28 November 2026, Q211 sampai Q212)
+Keputusan pencipta 27 November 2026 22.20 dan 22.28: jaringan demo dari blok 0 sesudah pembersihan total (Q211): semua container,
+volume, image, kunci seed, wallet operator, wallet faucet, dan token tunnel di PC dan VPS dihapus tanpa cadangan. Image baru, seed
+baru PeerId `12D3KooWPdd2VH92LVRwJNrokxKQJCerctJNksErJn5PB53kbEsD` (Q212a), wallet penambang dan treasury baru dengan delapan kantong
+bernama sama (Q212b), seed bawaan node diganti (Q212c), peluncuran tertutup pola bagian 1 (99 blok, upacara, blok 100; Q212d), lalu
+VPS demo dan isi faucet pertama 50.000 ZVRG (Q212e). Satu VPS resmi (DEC-48). Rilis node dengan seed baru (paket VPS, Zevrigo Node
+desktop dan Android) menyusul.

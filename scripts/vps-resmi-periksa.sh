@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vps-resmi-periksa.sh - membandingkan semua VPS resmi Zevrigo (TSK-M76, DEC-47): susunannya harus sama persis. Dijalankan dari
 # komputer pencipta (WSL), kunci SSH semua VPS sudah dimuat ke ssh-agent:
-#   bash scripts/vps-resmi-periksa.sh [alias-ssh ...]        bawaan: zevrigo-vps zevrigo-eu zevrigo-roy
+#   bash scripts/vps-resmi-periksa.sh [alias-ssh ...]        bawaan: zevrigo-vps (satu VPS resmi, DEC-48)
 # Dibaca dari setiap VPS: ~/zevrigo/VERSI, sidik compose yang terpasang, ID image zevrigo:regtest, versi Docker dan compose,
 # layanan profile demo yang harus dan yang jalan, tinggi chain seed dan pengamat. Hasil: tabel, lalu SERAGAM (keluar 0) atau
 # BEDA dengan daftar perbedaan (keluar 1). Tidak mengubah apa pun.
@@ -9,7 +9,7 @@ set -euo pipefail
 
 daftar=("$@")
 if [[ ${#daftar[@]} -eq 0 ]]; then
-    daftar=(zevrigo-vps zevrigo-eu zevrigo-roy)
+    daftar=(zevrigo-vps)
 fi
 if ! ssh-add -l > /dev/null 2>&1; then
     echo "BERHENTI: ssh-agent tanpa kunci. Muat dulu: eval \"\$(ssh-agent -s)\"; ssh-add ~/.ssh/<kunci setiap VPS>"
