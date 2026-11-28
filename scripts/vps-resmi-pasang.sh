@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # vps-resmi-pasang.sh - memasang susunan VPS resmi (TSK-M76, DEC-47) ke SATU VPS resmi Zevrigo. Susunannya sama di setiap VPS:
-# compose.yaml + compose.publik.yaml dari repo ini, profile demo, pilihan per VPS hanya di ~/zevrigo/.env.
+# compose.yaml + compose.publik.yaml dari repo ini, profile demo, pilihan per VPS hanya di ~/zevrigo-regtest/susunan/.env.
 # Dijalankan dari repo zevrigo-demo di komputer pencipta (WSL), kunci SSH VPS sudah dimuat ke ssh-agent:
 #   bash scripts/vps-resmi-pasang.sh <alias-ssh>          contoh: bash scripts/vps-resmi-pasang.sh zevrigo-eu
-# Syarat di VPS: ~/zevrigo/.env (contoh scripts/vps-resmi.env.contoh), ~/.zevrigo.env (token tunnel, izin 600), dan image
+# Syarat di VPS: ~/zevrigo-regtest/susunan/.env (contoh scripts/vps-resmi.env.contoh), ~/zevrigo-regtest/rahasia/tunnel.env (token tunnel, izin 600), dan image
 # zevrigo:regtest dengan ID yang sama dengan PC (dikirim dulu dengan docker save/load). Langkah:
-#   1. compose.yaml dan compose.publik.yaml dari commit HEAD (bukan salinan kerja) disalin ke ~/zevrigo; berkas lama ke
-#      ~/zevrigo/sebelum/
+#   1. compose.yaml dan compose.publik.yaml dari commit HEAD (bukan salinan kerja) disalin ke ~/zevrigo-regtest/susunan; berkas lama ke
+#      ~/zevrigo-regtest/susunan/sebelum/
 #   2. konfigurasi diperiksa, lalu docker compose up -d --no-build --force-recreate: SEMUA layanan dibuat ulang (Q206c). Layanan
 #      yang berbagi namespace jaringan node (explorer, gerbang-rpc, penambang-cadangan, cloudflared*) harus ikut dibuat ulang bila
 #      node dibuat ulang; dengan semua dibuat ulang, setiap VPS sesudah pemasangan pasti dalam keadaan yang sama. Gangguan ±1 menit
-#   3. semua layanan profile aktif jalan dalam 90 detik, lalu ~/zevrigo/VERSI ditulis
+#   3. semua layanan profile aktif jalan dalam 90 detik, lalu ~/zevrigo-regtest/susunan/VERSI ditulis
 # Pemasangan pertama di VPS yang masih memakai susunan lama (profile vps, tanpa .env) memakai skrip pemindahan tersendiri
 # (Q206b, Q206c), karena pemulihan di bawah memakai .env baru.
 # Gagal di langkah 2-3: berkas lama dipasang lagi dan layanan dinyalakan lagi dengan berkas lama.
@@ -42,8 +42,8 @@ git show HEAD:compose.publik.yaml > "$kerja/compose.publik.yaml"
 cat > "$kerja/jarak.sh" << 'JARAK'
 set -u
 stop() { echo "BERHENTI: $1"; exit 1; }
-cd ~/zevrigo || stop "folder ~/zevrigo tidak ada"
-[ -f .env ] || stop "~/zevrigo/.env tidak ada (contoh scripts/vps-resmi.env.contoh)"
+cd ~/zevrigo-regtest/susunan || stop "folder ~/zevrigo-regtest/susunan tidak ada"
+[ -f .env ] || stop "~/zevrigo-regtest/susunan/.env tidak ada (contoh scripts/vps-resmi.env.contoh)"
 nilai() { sed -n "s/^$1=//p" .env | tail -n 1; }
 for k in COMPOSE_FILE COMPOSE_PROFILES ZVRG_NAMA_VPS ZVRG_HOST_SEED ZVRG_DIAM; do
   [ -n "$(nilai "$k")" ] || stop ".env tanpa $k"
@@ -52,8 +52,9 @@ done
 PROF=$(nilai COMPOSE_PROFILES)
 case ",$PROF," in *,demo,*) ;; *) stop "COMPOSE_PROFILES tanpa demo" ;; esac
 case ",$PROF," in *,pc,*) stop "COMPOSE_PROFILES berisi pc (profile komputer pencipta)" ;; esac
-[ -f ~/.zevrigo.env ] || stop "token tunnel ~/.zevrigo.env tidak ada"
-[ "$(stat -c %a ~/.zevrigo.env)" = 600 ] || stop "izin ~/.zevrigo.env bukan 600"
+[ -f ~/zevrigo-regtest/rahasia/tunnel.env ] || stop "token tunnel ~/zevrigo-regtest/rahasia/tunnel.env tidak ada"
+[ "$(stat -c %a ~/zevrigo-regtest/rahasia/tunnel.env)" = 600 ] || stop "izin ~/zevrigo-regtest/rahasia/tunnel.env bukan 600"
+[ "$(stat -c %a ~/zevrigo-regtest/rahasia)" = 700 ] || stop "izin folder ~/zevrigo-regtest/rahasia bukan 700"
 VIMG=$(docker image inspect --format '{{.Id}}' zevrigo:regtest < /dev/null 2> /dev/null)
 [ "$VIMG" = "$IMG" ] || stop "image zevrigo:regtest VPS ($VIMG) beda dengan PC ($IMG); kirim image dulu"
 cp .env .masuk/.env
@@ -102,6 +103,6 @@ echo "SELESAI"
 JARAK
 
 echo "VPS $alias_vps: commit $commit, image $img"
-ssh "${SO[@]}" "$alias_vps" 'mkdir -p ~/zevrigo/.masuk'
-scp -q "${SO[@]}" "$kerja/compose.yaml" "$kerja/compose.publik.yaml" "$alias_vps:zevrigo/.masuk/"
+ssh "${SO[@]}" "$alias_vps" 'mkdir -p ~/zevrigo-regtest/susunan/.masuk'
+scp -q "${SO[@]}" "$kerja/compose.yaml" "$kerja/compose.publik.yaml" "$alias_vps:zevrigo-regtest/susunan/.masuk/"
 ssh "${SO[@]}" "$alias_vps" "IMG=$img COMMIT=$commit bash -s" < "$kerja/jarak.sh"

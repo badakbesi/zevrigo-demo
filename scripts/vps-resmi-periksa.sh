@@ -2,7 +2,7 @@
 # vps-resmi-periksa.sh - membandingkan semua VPS resmi Zevrigo (TSK-M76, DEC-47): susunannya harus sama persis. Dijalankan dari
 # komputer pencipta (WSL), kunci SSH semua VPS sudah dimuat ke ssh-agent:
 #   bash scripts/vps-resmi-periksa.sh [alias-ssh ...]        bawaan: zevrigo-vps (satu VPS resmi, DEC-48)
-# Dibaca dari setiap VPS: ~/zevrigo/VERSI, sidik compose yang terpasang, ID image zevrigo:regtest, versi Docker dan compose,
+# Dibaca dari setiap VPS: ~/zevrigo-regtest/susunan/VERSI, sidik compose yang terpasang, ID image zevrigo:regtest, versi Docker dan compose,
 # layanan profile demo yang harus dan yang jalan, tinggi chain seed dan pengamat. Hasil: tabel, lalu SERAGAM (keluar 0) atau
 # BEDA dengan daftar perbedaan (keluar 1). Tidak mengubah apa pun.
 set -euo pipefail
@@ -16,7 +16,7 @@ if ! ssh-add -l > /dev/null 2>&1; then
     exit 1
 fi
 SO=(-o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15)
-kumpul='cd ~/zevrigo 2> /dev/null || { echo "galat=folder ~/zevrigo tidak ada"; exit 0; }
+kumpul='cd ~/zevrigo-regtest/susunan 2> /dev/null || { echo "galat=folder ~/zevrigo-regtest/susunan tidak ada"; exit 0; }
 v() { sed -n "s/^$1=//p" "$2" 2> /dev/null | tail -n 1; }
 echo "nama=$(v ZVRG_NAMA_VPS .env)"
 echo "profiles=$(v COMPOSE_PROFILES .env)"
@@ -79,7 +79,7 @@ for a in "${daftar[@]}"; do
         fi
     done
     if [[ $(n "$a" versi_compose_yaml) != "$(n "$a" compose_yaml)" || $(n "$a" versi_compose_publik) != "$(n "$a" compose_publik)" ]]; then
-        beda+=("$a: ~/zevrigo/VERSI tidak cocok dengan compose terpasang (tidak dipasang dengan vps-resmi-pasang.sh)")
+        beda+=("$a: ~/zevrigo-regtest/susunan/VERSI tidak cocok dengan compose terpasang (tidak dipasang dengan vps-resmi-pasang.sh)")
     fi
     jalan=" $(n "$a" jalan) "
     for s in $(n "$a" harus); do

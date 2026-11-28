@@ -52,7 +52,7 @@ Prinsip:
                                         │ HTTPS / WSS
                                 Cloudflare (TLS, DDoS)
                                         │ tunnel keluar (tanpa port router)
-  Komputer pencipta · WSL · Docker, project zevrigo-publik
+  Komputer pencipta · WSL · Docker, project zevrigo-regtest
   ┌───────────────────────────────────────────────────────────────────────┐
   │ namespace node SEED                                                   │
   │   node seed (--p2p-ws-port 28803) · cloudflared · explorer 28802     │

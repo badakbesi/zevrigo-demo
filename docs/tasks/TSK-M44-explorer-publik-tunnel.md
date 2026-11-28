@@ -11,7 +11,7 @@ membuka explorer (regtest sebagai uji). Seed node dan testnet menyusul.
 ## Isi
 | Bagian | Isi |
 |---|---|
-| `compose.publik.yaml` (baru) | Dipakai bersama `compose.yaml`; project `zevrigo-publik`; port host node dicabut (`!reset`); explorer `--trust-proxy` di `127.0.0.1` dalam namespace node; layanan `cloudflared` (image resmi dikunci digest, `tunnel --no-autoupdate run`, token dari `${HOME}/.zevrigo.env`, berbagi namespace node) |
+| `compose.publik.yaml` (baru) | Dipakai bersama `compose.yaml`; project `zevrigo-regtest`; port host node dicabut (`!reset`); explorer `--trust-proxy` di `127.0.0.1` dalam namespace node; layanan `cloudflared` (image resmi dikunci digest, `tunnel --no-autoupdate run`, token dari `${HOME}/zevrigo-regtest/rahasia/tunnel.env`, berbagi namespace node) |
 | Dokumen | Spesifikasi Docker v0.1 Bagian 7 dan DEC-10 bagian 9 (tambahan), README, MOD-14, docs/tasks |
 | Tanpa | Perubahan kode, dependensi Rust/npm baru, atau port router yang dibuka |
 

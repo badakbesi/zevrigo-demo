@@ -22,7 +22,7 @@ dan log mencatat `blok diterima`; `https://demo-explorer.zevrigo.online/api/v1/s
 restart `unless-stopped`.
 
 ## Batas
-- Regtest: PoW dev, tanpa nilai. Chain demo bertambah sekitar 720 blok per hari; volume `zevrigo-publik_zvrg-data` ikut
+- Regtest: PoW dev, tanpa nilai. Chain demo bertambah sekitar 720 blok per hari; volume `zevrigo-regtest_zvrg-data` ikut
   tumbuh (blok berisi coinbase saja, kecil).
 - Hanya blok, belum ada transaksi berkala (blok berisi coinbase saja). Transaksi demo memerlukan wallet berpassword di
   container dan bisa dibuat di task tersendiri.

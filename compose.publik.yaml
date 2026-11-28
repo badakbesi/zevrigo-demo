@@ -6,13 +6,13 @@
 #         node (seed), node-pengamat, explorer, gerbang-rpc, node-faucet + faucet, penambang-cadangan, cloudflared-zevrigo
 #   pc    komputer pencipta: node-penambang + miner-berkala, node-treasury (kunci kantong treasury tidak pernah di VPS)
 #
-# VPS resmi: berkas ini dan compose.yaml disalin apa adanya (scripts/vps-resmi-pasang.sh) ke ~/zevrigo, dan semua pilihan dibaca
-# dari ~/zevrigo/.env (contoh scripts/vps-resmi.env.contoh: COMPOSE_FILE, COMPOSE_PROFILES, ZVRG_HOST_SEED, ZVRG_DIAM). Perintahnya
+# VPS resmi: berkas ini dan compose.yaml disalin apa adanya (scripts/vps-resmi-pasang.sh) ke ~/zevrigo-regtest/susunan, dan semua pilihan dibaca
+# dari ~/zevrigo-regtest/susunan/.env (contoh scripts/vps-resmi.env.contoh: COMPOSE_FILE, COMPOSE_PROFILES, ZVRG_HOST_SEED, ZVRG_DIAM). Perintahnya
 # sama di setiap VPS:
-#   cd ~/zevrigo && docker compose up -d --no-build        (berhenti: docker compose stop)
-# Yang memang berbeda antar-VPS hanya token tunnel (~/.zevrigo.env), nama host seed VPS itu (ZVRG_HOST_SEED, karena setiap seed
+#   cd ~/zevrigo-regtest/susunan && docker compose up -d --no-build        (berhenti: docker compose stop)
+# Yang memang berbeda antar-VPS hanya token tunnel (~/zevrigo-regtest/rahasia/tunnel.env), nama host seed VPS itu (ZVRG_HOST_SEED, karena setiap seed
 # punya PeerId sendiri), jeda penambang cadangan (ZVRG_DIAM, agar dua VPS tidak menambang bersamaan), dan isi volume data.
-# Pemeriksaan keseragaman: scripts/vps-resmi-periksa.sh (membandingkan ~/zevrigo/VERSI dan keadaan setiap VPS).
+# Pemeriksaan keseragaman: scripts/vps-resmi-periksa.sh (membandingkan ~/zevrigo-regtest/susunan/VERSI dan keadaan setiap VPS).
 #
 # PC:  COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d
 #
@@ -21,7 +21,7 @@
 # miner-berkala; penambang-cadangan di VPS menambang bila chain diam ZVRG_DIAM detik; layanan publik tetap menjawab.
 #
 # Token tunnel TIDAK disimpan di repo. Satu tunnel Cloudflare `zevrigo` (DEC-48; akun domain zevrigo.online, layanan
-# cloudflared-zevrigo); token di ${HOME}/.zevrigo.env (izin 600, satu baris TUNNEL_TOKEN=). Route ("Published application"),
+# cloudflared-zevrigo); token di ${HOME}/zevrigo-regtest/rahasia/tunnel.env (izin 600, satu baris TUNNEL_TOKEN=). Route ("Published application"),
 # semuanya tipe HTTP:
 #   demo-explorer.zevrigo.online    -> localhost:28802   explorer
 #   demo-seed-p2p.zevrigo.online    -> localhost:28803   seed P2P WebSocket (TLS diputus Cloudflare) = ZVRG_HOST_SEED
@@ -37,8 +37,8 @@
 #
 # Explorer mendengar di 127.0.0.1 (bawaan) di dalam namespace jaringan node. Satu-satunya jalan masuk dari luar adalah
 # cloudflared yang berbagi namespace itu, sehingga --trust-proxy aman (TSK-M43). Port host dari compose.yaml dicabut; RPC dan
-# P2P TCP node tidak terbuka; P2P WebSocket hanya di 127.0.0.1:28803 dan dicapai lewat cloudflared. Project zevrigo-publik,
-# volume sendiri (zevrigo-publik_zvrg-data, ...). Saat ini regtest (pilihan pencipta 11 November 2026); testnet menyusul
+# P2P TCP node tidak terbuka; P2P WebSocket hanya di 127.0.0.1:28803 dan dicapai lewat cloudflared. Project zevrigo-regtest,
+# volume sendiri (zevrigo-regtest_zvrg-data, ...). Saat ini regtest (pilihan pencipta 11 November 2026); testnet menyusul
 # bersama genesis testnet (TSK-F06).
 #
 # Batas sumber daya sama di setiap VPS (TSK-M76): seed 384 MiB / 1 CPU; explorer, node lain, gerbang RPC, faucet 256 MiB /
@@ -59,13 +59,13 @@
 # node-penambang. Hadiah ke payload di /data/payout-penambang (volume node-penambang, dipasang baca saja); selama file itu
 # belum ada atau tidak sah, hadiah ke kunci NUMS yang tidak bisa dibelanjakan (sama dengan gerbang Q121). Ganti jeda:
 #   ZVRG_JEDA=60 COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d --no-deps miner-berkala
-name: zevrigo-publik
+name: zevrigo-regtest
 
 services:
   node:
     profiles: ["demo"]
     # Q191 (DEC-43, TSK-M75): seed mengumumkan alamat wss resminya ke rekan lewat pertukaran alamat (protokol addr). TSK-M76:
-    # nama host dari ZVRG_HOST_SEED (~/zevrigo/.env VPS itu; bawaan seed pertama), dan --seed-resmi agar seed resmi saling
+    # nama host dari ZVRG_HOST_SEED (~/zevrigo-regtest/susunan/.env VPS itu; bawaan seed pertama), dan --seed-resmi agar seed resmi saling
     # tersambung (seed kedua ke seed pertama, Q204b).
     command: ["--regtest", "--datadir", "/data", "--p2p-ws-port", "28803", "--p2p-publik", "/dns4/${ZVRG_HOST_SEED:-demo-seed-p2p.zevrigo.online}/tcp/443/tls/sni/${ZVRG_HOST_SEED:-demo-seed-p2p.zevrigo.online}/ws", "--seed-resmi"]
     ports: !reset []
@@ -98,6 +98,9 @@ services:
     pull_policy: never
     entrypoint: ["zevrigo-demo"]
     command: ["rpc", "--trust-proxy", "--rate", "60"]
+    # /data sementara: image menyatakan VOLUME /data; tanpa ini setiap pembuatan container meninggalkan volume anonim (Q214)
+    tmpfs:
+      - /data
     network_mode: "service:node"
     depends_on:
       - node
@@ -109,7 +112,7 @@ services:
   penambang-cadangan:
     profiles: ["demo"]
     # Q181 (21 November 2026, pencipta: penambang cadangan di VPS, mode cadangan, hadiah ke alamat penambang PC, pasang
-    # secepatnya; TSK-M76: di setiap VPS resmi, ZVRG_DIAM berbeda per VPS lewat ~/zevrigo/.env): di namespace node seed (RPC 127.0.0.1:28801 bawaan zevrigo-cli dan zevrigo-miner, tidak lewat gerbang
+    # secepatnya; TSK-M76: di setiap VPS resmi, ZVRG_DIAM berbeda per VPS lewat ~/zevrigo-regtest/susunan/.env): di namespace node seed (RPC 127.0.0.1:28801 bawaan zevrigo-cli dan zevrigo-miner, tidak lewat gerbang
     # publik). Setiap 30 detik membaca tinggi chain; menambang satu blok hanya bila tinggi tidak naik selama ZVRG_DIAM detik
     # (bawaan 300), misalnya saat PC mati. Selama miner-berkala PC jalan (satu blok per 120 detik) layanan ini diam. Sesudah
     # mulai juga menunggu ZVRG_DIAM detik, agar node seed yang baru menyala sempat sinkron dulu. ZVRG_PAYOUT = payload x-only
@@ -137,6 +140,8 @@ services:
     environment:
       ZVRG_PAYOUT: "bce31560d861cd41eb26456a472df2f8e86408a67d303bd10a384cc9e3d793db"
       ZVRG_DIAM: ${ZVRG_DIAM:-300}
+    tmpfs:
+      - /data
     network_mode: "service:node"
     init: true
     depends_on:
@@ -154,9 +159,9 @@ services:
     image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
     command: ["tunnel", "--no-autoupdate", "run"]
     # Token hanya ada di VPS; required: false agar compose profil pc (PC tanpa berkas ini) tetap terbaca. Di VPS
-    # scripts/vps-resmi-pasang.sh memeriksa ~/.zevrigo.env ada (izin 600).
+    # scripts/vps-resmi-pasang.sh memeriksa ~/zevrigo-regtest/rahasia/tunnel.env ada (izin 600).
     env_file:
-      - path: ${HOME}/.zevrigo.env
+      - path: ${HOME}/zevrigo-regtest/rahasia/tunnel.env
         required: false
     network_mode: "service:node"
     depends_on:

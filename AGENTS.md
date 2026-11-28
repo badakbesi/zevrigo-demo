@@ -32,7 +32,10 @@ make docker-build # image zevrigo:regtest, konteks folder induk zevrigo_lab (Doc
   di repo ini sejak 18 November 2026. Konteks build adalah folder induk `zevrigo_lab`, jadi repo `zevrigo`,
   `zevrigo-explorer`, dan `zevrigo-blog` harus berdampingan; yang masuk konteks hanya daftar izin di
   `Dockerfile.dockerignore`. Image dibangun di PC lalu dikirim ke VPS (docker save/load).
-- Nama project compose (`zevrigo`, `zevrigo-publik`) dan nama volume jangan diganti: data node VPS dan PC ada di volume itu.
+- Nama project compose (`zevrigo-regtest-peserta` di `compose.yaml`, `zevrigo-regtest` bila digabung `compose.publik.yaml`) dan nama
+  volume jangan diganti tanpa langkah pindah data: data node VPS dan PC ada di volume itu (pindah pertama Q214, 28 November 2026).
+- Pola nama di mesin operator: berkas jaringan demo regtest hanya di `~/zevrigo-regtest/` (VPS: `susunan/`, `rahasia/`), berkas
+  rilis hanya di `~/zevrigo-rilis/`; tidak ada nama Zevrigo lain di luar keduanya, repo, dan `~/.ssh/zevrigo-*`.
 - Token tunnel, wallet faucet, dan kunci treasury tidak pernah masuk repo.
 
 ## Berhenti dan tanya bila

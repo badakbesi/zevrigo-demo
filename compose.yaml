@@ -6,11 +6,13 @@
 #   docker compose up -d                                     node + explorer
 #   ZVRG_PAYOUT=<payload hex 64> docker compose --profile miner up -d miner
 #   docker compose exec node zevrigo-cli --datadir /data wallet-create
-#   docker compose down                                      berhenti (data tetap di volume zevrigo_zvrg-data)
+#   docker compose down                                      berhenti (data tetap di volume zevrigo-regtest-peserta_zvrg-data)
 #
 # Sejak 18 November 2026 (DEC-39) berkas ini di repo zevrigo-demo; perintah di atas dijalankan dari folder zevrigo-demo.
-# Image dibangun dari folder induk zevrigo_lab (lihat Dockerfile). Nama project dan volume tidak berubah.
-name: zevrigo
+# Image dibangun dari folder induk zevrigo_lab (lihat Dockerfile). Sejak 28 November 2026 project
+# zevrigo-regtest-peserta (pola nama Q214); volume lama zevrigo_zvrg-data (chain sebelum jaringan demo dimulai ulang 28 November
+# 2026, tidak berlaku lagi) boleh dihapus: docker volume rm zevrigo_zvrg-data
+name: zevrigo-regtest-peserta
 
 services:
   node:
@@ -51,6 +53,9 @@ services:
     pull_policy: never
     entrypoint: ["zevrigo-miner"]
     command: ["--payout", "${ZVRG_PAYOUT:-}"]
+    # /data sementara: image menyatakan VOLUME /data; tanpa ini setiap pembuatan container meninggalkan volume anonim (Q214)
+    tmpfs:
+      - /data
     network_mode: "service:node"
     depends_on:
       - node

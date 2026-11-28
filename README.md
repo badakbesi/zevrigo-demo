@@ -28,7 +28,7 @@ docker compose build
 docker compose up -d
 ```
 
-Buka `http://127.0.0.1:28802/`. Node dan explorer berjalan di container dengan data di volume `zevrigo_zvrg-data`;
+Buka `http://127.0.0.1:28802/`. Node dan explorer berjalan di container dengan data di volume `zevrigo-regtest-peserta_zvrg-data`;
 RPC node tidak terbuka ke host, dan explorer hanya bisa dibuka dari komputer ini. Wallet dan miner di dalam container:
 
 ```bash
@@ -38,13 +38,16 @@ ZVRG_PAYOUT=<payload dari perintah address> docker compose --profile miner up -d
 docker compose down
 ```
 
+Sejak 28 November 2026 project ini bernama `zevrigo-regtest-peserta`. Volume dari sebelum tanggal itu (`zevrigo_zvrg-data`) berisi
+chain lama yang tidak berlaku lagi sesudah jaringan demo dimulai ulang, dan boleh dihapus: `docker volume rm zevrigo_zvrg-data`.
+
 Aturan lengkap di [docs/reference/spesifikasi-docker-v0.1.md](docs/reference/spesifikasi-docker-v0.1.md).
 
 ### Explorer dan seed publik lewat Cloudflare Tunnel
 
 `compose.publik.yaml` membuka explorer, seed P2P, gerbang RPC, dan faucet ke internet lewat Cloudflare Tunnel tanpa membuka
 port router, lewat satu tunnel `zevrigo` (layanan `cloudflared-zevrigo`, domain resmi `zevrigo.online`, DEC-42, DEC-48).
-Token disimpan di luar repo, di VPS: `~/.zevrigo.env` (izin `600`, satu baris `TUNNEL_TOKEN=` diikuti token dari dasbor
+Token disimpan di luar repo, di VPS: `~/zevrigo-regtest/rahasia/tunnel.env` (izin `600`, satu baris `TUNNEL_TOKEN=` diikuti token dari dasbor
 Cloudflare). Route tipe HTTP: explorer `demo-explorer.zevrigo.online` ke `localhost:28802`, seed P2P WebSocket
 `demo-seed-p2p.zevrigo.online` ke `localhost:28803`, gerbang RPC untuk wallet peserta (hanya metode aman, tanpa menambang)
 `demo-gerbang-rpc.zevrigo.online` ke `localhost:28804`, dan faucet `demo-faucet.zevrigo.online` ke `node-faucet:28805`.
@@ -52,8 +55,8 @@ Cloudflare). Route tipe HTTP: explorer `demo-explorer.zevrigo.online` ke `localh
 Jaringan demo berjalan di komputer pencipta dan di VPS resmi (TSK-M65, DEC-38), dipilih dengan profile compose. Tanpa
 `COMPOSE_PROFILES` tidak ada layanan publik yang dinyalakan. **Setiap VPS resmi memakai susunan yang sama persis** (profile
 `demo`, TSK-M76, DEC-47): seed, node pengamat, explorer, gerbang RPC, faucet, penambang cadangan, dan tunnel Cloudflare VPS itu.
-Sekarang ada satu VPS resmi dengan satu tunnel `zevrigo` (DEC-48). Pilihan per VPS hanya di `~/zevrigo/.env` ([scripts/vps-resmi.env.contoh](scripts/vps-resmi.env.contoh)); token tunnel di
-`~/.zevrigo.env`. Susunan ini hanya untuk VPS resmi Zevrigo; operator lain bebas memakai susunannya sendiri.
+Sekarang ada satu VPS resmi dengan satu tunnel `zevrigo` (DEC-48). Pilihan per VPS hanya di `~/zevrigo-regtest/susunan/.env` ([scripts/vps-resmi.env.contoh](scripts/vps-resmi.env.contoh)); token tunnel di
+`~/zevrigo-regtest/rahasia/tunnel.env`. Susunan ini hanya untuk VPS resmi Zevrigo; operator lain bebas memakai susunannya sendiri.
 
 ```bash
 # PC (WSL): membangun image, lalu node penambang + miner-berkala dan node treasury
@@ -63,7 +66,7 @@ COMPOSE_PROFILES=pc docker compose -f compose.yaml -f compose.publik.yaml up -d
 bash scripts/vps-resmi-pasang.sh zevrigo-vps
 bash scripts/vps-resmi-periksa.sh
 # Di VPS resmi mana pun
-cd ~/zevrigo && docker compose up -d --no-build
+cd ~/zevrigo-regtest/susunan && docker compose up -d --no-build
 ```
 
 RPC dan P2P TCP node tidak terbuka, explorer dan seed hanya bisa dicapai lewat tunnel, dan batas laju explorer berlaku per
