@@ -9,7 +9,8 @@
 # menerbitkannya. Belum ditandatangani (DEC-40).
 #
 # Repo inti di-checkout di sebelah repo ini (crate inti lewat path `../zevrigo`, AGENDA P3) pada ZEVRIGO_CORE_REF yang dikunci
-# (be71d57: seed resmi bawaan, penemuan rekan, sambungan masuk; DEC-43), agar rilis selalu dibangun dari kode yang sama.
+# (661781a: seed resmi bawaan sesudah jaringan demo dimulai ulang 28 November 2026; DEC-43), agar rilis selalu dibangun dari
+# kode yang sama.
 
 name: Rilis paket peserta
 
@@ -29,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ZEVRIGO_CORE_REF: be71d5750b4a67d02f1d66e965637eade6780191
+  ZEVRIGO_CORE_REF: 661781aa0d816f8c0e24194e6eabebd61dbde22e
   PAKET: peserta-demo-zevrigo
   CARGO_TERM_COLOR: never
 

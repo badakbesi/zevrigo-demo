@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ZEVRIGO_CORE_REF: be71d5750b4a67d02f1d66e965637eade6780191
+  ZEVRIGO_CORE_REF: 661781aa0d816f8c0e24194e6eabebd61dbde22e
   PAKET: demo-zevrigo-vps-linux-x86_64.tar.gz
   CARGO_TERM_COLOR: never
 
